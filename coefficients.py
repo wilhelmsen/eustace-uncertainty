@@ -54,7 +54,7 @@ class Coefficients(object):
                     yield line.split()[0]
 
 
-    def get_night_coefficients(self):
+    def get_night_coefficients(self, s_teta):
         a_n = self.a_sst_night
         b_n = self.b_sst_night
         c_n = self.c_sst_night
@@ -62,6 +62,7 @@ class Coefficients(object):
         e_n = self.e_sst_night
         f_n = self.f_sst_night
         cor_n = self.gain_sst_night * s_teta + self.offset_sst_night
+        return a_n, b_n, c_n, d_n, e_n, f_n, cor_n
 
     def get_day_coefficients(self):
         a_d = self.a_sst_day
@@ -71,15 +72,16 @@ class Coefficients(object):
         e_d = self.e_sst_day
         f_d = self.f_sst_day
         g_d = self.g_sst_day
+        return a_d, b_d, c_d, d_d, e_d, f_d, g_d
 
-    def get_coefficient(self, T11):
+    def get_coefficients(self, T11):
         # /* coefficients for noaa 12 from Key et al 1997 */
         if T11 < 240.0:
             a = self.a_ist_lss240
             b = self.b_ist_lss240
             c = self.c_ist_lss240
             d = self.d_ist_lss240
-        elif (T11 >= 240.0 && T11 < 260.0):
+        elif T11 < 260.0:
             a = self.a_ist_range240_260
             b = self.b_ist_range240_260
             c = self.c_ist_range240_260
@@ -90,7 +92,6 @@ class Coefficients(object):
             c = self.c_ist_grt260
             d = self.d_ist_grt260
         return a, b, c, d
-
 
         
 
