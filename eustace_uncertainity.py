@@ -29,86 +29,145 @@ else:
     logging.basicConfig( filename=args["--log-filename"], level=logging.WARNING )
 LOG.debug(args)
 
-DEGREE_2_RADIANS = 2*math.pi/360.0
-ABS_ZERO=273.15
+class SstException(Exception):
+    pass
 
+class DAY_STATE:
+    DAY = "DAY"
+    NIGHT = "NIGHT"
+    TWILIGHT = "TWILIGHT"
 
-class SST_State:
-    NOSTATE, DAY, NIGHT, TWILIGHT = range(4)
+class ST_ALGORITHM:
+    SST_DAY = "SST_DAY"
+    SST_NIGHT = "SST_NIGHT"
+    SST_TWILIGHT = "SST_TWILIGHT"
+    IST = "IST"
+    MIZT_SST_DAY_IST = "MIZT_SST_DAY_IST"
+    MIZT_SST_NIGHT_IST = "MIZT_SST_NIGHT_IST"
 
-class ASST_ALGORITHM:
-    DAY, NIGHT, TWILIGHT = range(3)
-
-class SurfaceTemperatureAlgorithm:
-    NOALGORITHM, SSTDAY, SSTNIGHT, SSTTWILIGHT, IST, MIZTSSTDAYIST, MIZTSSTNIGHTIST = range(7)
-
-sst_algo=SurfaceTemperatureAlgorithm.NOALGORITHM
-
-def steta(sat_zenit_angle):
+def sat_teta(sat_zenit_angle):
     return 1.0 / np.cos(np.radians(sat_zenit_angle)) - 1.0
 
-def surface_temperature(satellite_id, temp_11, temp_12, temp_37, sun_zenit_angle, sat_zenit_angle, ch3_data_exists):
-    with coefficients.Coefficients(satellite_id) as c:
-        print c
-
-def validate_Ts(Ts, T11, T12):
-    if (T11-T12) > 2.0:
-        if 268.95 <= T11 and T11 < 270.95:
+def validate_surface_temperature(ts, t11, t12):
+    if (t11) > 2.0:
+        if 268.95 <= t11 and t11 < 270.95:
             return 141.0
-        if T11 >= 270.95:
+        if t11 >= 270.95:
             return 142.0
-    if Ts < T11:
+    if ts < t11:
         return 140
-    if Ts < 150.0:
+    if ts < 150.0:
         return 144.0
-    if Ts > 350.0:
+    if ts > 350.0:
         return 145.0
-    return Ts
+    return ts
 
-def select_asst_algorithm(sun_zenit_angle, ch3data_exist):
-    if sun_zenit_angle <= 90 or not ch3data_exist:
-        return ASST_ALGORITHM.DAY
+
+def select_day_state(sun_zenit_angle, t37):
+    if sun_zenit_angle <= 90 or t37 is None:
+        return DAY_STATE.DAY
     else:
         if sun_zenit_angle < 110:
-            return ASST_ALGORITHM.TWILIGHT
+            return DAY_STATE.TWILIGHT
         else:
-            return ASST_ALGORITHM.NIGHT
+            return DAY_STATE.NIGHT
 
-def ist(coeff, T11, T12, s_teta):
+
+def select_surface_temperature_algorithm(sun_zenit_angle, t11, t37):
+    day_state = select_day_state(sun_zenit_angle, t37)
+
+    if t11 >= 268.95 and t11 < 270.95:
+        # MIZT - Transition zone between water and ice weighted mean SST-IST, from Vincent et al 2008*/
+        if day_state == DAY_STATE.DAY:
+            return ST_ALGORITHM.MIZT_SST_DAY_IST
+        elif ((day_state == DAY_STATE.NIGHT)):
+            return ST_ALGORITHM.MIZT_SST_NIGHT_IST
+        else:
+            raise SstException("Missing sst state for mizt...")
+    elif t11 >= 270.95:
+        # Arctic SST
+        if day_state == DAY_STATE.DAY:
+            return ST_ALGORITHM.SST_DAY
+        elif day_state == DAY_STATE.NIGHT:
+            return ST_ALGORITHM.SST_NIGHT
+        elif day_state == DAY_STATE.TWILIGHT:
+            return ST_ALGORITHM.SST_TWILIGHT
+        else:
+            raise SstException("Missing sst state for arctic sst...")
+    else:
+        # IST
+        return ST_ALGORITHM.IST
+
+
+def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, sun_zenit_angle, s_teta, t_clim):
+    if st_algorithm == ST_ALGORITHM.SST_DAY:
+        return sea_surface_temperature_day(coeff, t11, t12, s_teta, t_clim)
+
+    if st_algorithm == ST_ALGORITHM.SST_NIGHT:
+        return sea_surface_temperature_night(coeff, t11, t12, t37, s_teta)
+
+    if st_algorithm == ST_ALGORITHM.SST_TWILIGHT:
+        sst_night = sea_surface_temperature_night(coeff, T11, T12, T37, s_teta)
+        sst_day = sea_surface_temperature_day(coeff, T11, T12, s_teta, t_clim)
+        return sst_twilight(sun_zenit_angle, sst_day, sst_night)
+
+    # All the following contain ist.
+    ist = ice_surface_temperature(coeff, t11, t12, s_teta)
+    if st_algorithm == ST_ALGORITHM.IST:
+        return ist
+
+    if st_algorithm == ST_ALGORITHM.MIZT_SST_DAY_IST:
+        sst = sea_surface_temperature_day(coeff, t11, t12, s_teta, t_clim)
+        return marginal_ice_zone_temperature(t11, ist, sst)
+
+    if st_algorithm == ST_ALGORITHM.MIZT_SST_NIGHT_IST:
+        sst = sea_surface_temperature_night(coeff, t11, t12, t37, s_teta)
+        return marginal_ice_zone_temperature(t11, ist, sst)
+
+    raise SstException("Unknown sst algorithm, '%s'."%(str(st_algorithm)))
+
+
+def ice_surface_temperature(coeff, t11, t12, s_teta):
     # IST split window algorithm from Key et al 1997
-    a, b, c, d = coeff.get_coefficients(T11)
-    return a + b * T11 + c * (T11 - T12) + d * ((T11 - T12) * s_teta)
+    a, b, c, d = coeff.get_ist_coefficients(t11)
+    return a + b * t11 + c * (t11 - t12) + d * ((t11 - t12) * s_teta)
 
-def sst_day(c, T11, T12, s_teta, t_clim):
+def marginal_ice_zone_temperature(t11, ist, sst):
+    #Marginal Ice Zone Temperature
+    return ((t11 - 270.95) * (-0.5) * ist) + ((t11 - 268.95) * 0.5 * sst)
+
+def sea_surface_temperature_day(coeff, T11, T12, s_teta, t_clim):
     # Arctic SST algorithm for 'day' and 'night' from PLBorgne 2010
-    a_d, b_d, c_d, d_d, e_d, f_d, g_d = c.get_day_coefficients()
+    a_d, b_d, c_d, d_d, e_d, f_d, g_d = coeff.get_sst_day_coefficients()
     return (a_d + b_d * s_teta) * (T11) + (c_d + d_d * s_teta + e_d * (t_clim)) * (T11-T12) + f_d + g_d * s_teta
 
-def sst_night(c, T11, T12, T37, s_teta):
-    a_n, b_n, c_n, d_n, e_n, f_n, cor_n = c.get_night_coefficients(s_teta)
+def sea_surface_temperature_night(coeff, T11, T12, T37, s_teta):
+    a_n, b_n, c_n, d_n, e_n, f_n, cor_n = coeff.get_sst_night_coefficients(s_teta)
     return (a_n + b_n * s_teta) * (T37) + (c_n + d_n * s_teta) * (T11 - T12) + e_n + f_n * s_teta + cor_n
 
-def sst_twilight(c, sun_zenit_angle, T11, T12, T37, s_teta, t_clim):
-    asst_night = sst_night(c, T11, T12, T37, s_teta)
-    asst_day = sst_day(c, T11, T12, s_teta, t_clim)
-    return ((sun_zenit_angle - 110) * (-0.05) * asst_day) + ((sun_zenit_angle - 90) * (0.05) * asst_night)
-
-def get_asst(asst_algorithm, c, T11, T12, T37, sun_zenit_angle, t_clim):
-    s_teta = steta(sun_zenit_angle)
-    if asst_algorithm == ASST_ALGORITHM.DAY:
-        return sst_day(c, T11, T12, s_teta, t_clim)
-    elif asst_algorithm == ASST_ALGORITHM.TWILIGHT:
-        return sst_twilight(c, sun_zenit_angle, T11, T12, T37, s_teta, t_clim)
-    elif asst_algorithm == ASST_ALGORITHM.NIGHT:
-        return sst_night(c, T11, T12, T37, s_teta)
-    else:
-        raise RuntimeError("Unknown asst algorithm.")
+def sea_surface_temperature_twilight(sun_zenit_angle, sst_day, sst_night):
+    return ((sun_zenit_angle - 110) * (-0.05) * sst_day) + ((sun_zenit_angle - 90) * (0.05) * sst_night)
 
 # GAC svarer til noaa
 # ist svarer til s_nwc
 
 if __name__ == "__main__":
-    surface_temperature(args['<sat-id>'], 1, 1, 1, 1, 1, 1)
+    satellite_id = args['<sat-id>']
+    t11 = 262
+    t12 = 261
+    t37 = 261 
+    sat_zenit_angle = 20
 
-    asst_algorithm = select_asst_algorithm(sun_zenit_angle, ch3data_exist)
-    asst = get_asst(asst_algorithm)
+    t11 = 261; t37 = None; sun_zenit_angle = 20
+    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37) == ST_ALGORITHM.IST)
+
+    t11 = 271; t37 = None; sun_zenit_angle = 20
+    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37) == ST_ALGORITHM.SST_DAY)
+
+    t11 = 269; t37 = None; sun_zenit_angle = 20
+    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37) == ST_ALGORITHM.MIZT_SST_DAY_IST)
+    
+    s_teta = sat_teta(sat_zenit_angle)
+    t_clim = 261
+    with coefficients.Coefficients(satellite_id) as c:
+        print get_surface_temperature(ST_ALGORITHM.MIZT_SST_DAY_IST, c, t11, t12, t37, sun_zenit_angle, s_teta, t_clim)
