@@ -3,23 +3,27 @@
 import os
 import numpy as np
 
+
 class CoefficientsException(Exception):
     pass
+
 
 class Coefficients(object):
     DEFAULT_COEFFICIENT_FILE = "calibration_nh_ktuned_20140814.txt"
 
     def __init__(self,
                  sat_id,
-                 filename = DEFAULT_COEFFICIENT_FILE,
+                 filename=DEFAULT_COEFFICIENT_FILE,
                  split_text="::"):
         self.sat_id = sat_id
         self.filename = filename
         assert(os.path.isfile(self.filename))
         self.split_text = split_text
 
-        if self.sat_id not in [id for id in Coefficients.satellite_ids(self.filename)]:
-            raise CoefficientsException("Satellite id, '%s', must be one of '%s'. Config file used: %s."%(
+        if self.sat_id not in [id for id in
+                               Coefficients.satellite_ids(self.filename)]:
+            raise CoefficientsException("Satellite id, '%s', must be one of "
+                                        "'%s'. Config file used: %s." % (
                     self.sat_id,
                     "', '".join(Coefficients.satellite_ids(self.filename)),
                     self.filename
@@ -46,7 +50,7 @@ class Coefficients(object):
 
     def __exit__(self, type, value, traceback):
         pass
-        
+
     def get_headers(self, line):
         assert(self.split_text in line)
         assert(line.startswith("#"))
@@ -68,7 +72,7 @@ class Coefficients(object):
         return ids.split().index("sat_id")
 
     @staticmethod
-    def satellite_ids(filename = DEFAULT_COEFFICIENT_FILE):
+    def satellite_ids(filename=DEFAULT_COEFFICIENT_FILE):
         assert(os.path.isfile(filename))
         with open(filename, 'r') as fp:
             line = fp.readline()
@@ -76,7 +80,6 @@ class Coefficients(object):
             for line in fp:
                 if not line.startswith("#") and line.strip() != "":
                     yield line.split()[sat_id_index]
-
 
     def get_sst_night_coefficients(self, s_teta):
         a_n = self.a_sst_night
@@ -117,7 +120,6 @@ class Coefficients(object):
             d = self.d_ist_grt260
         return a, b, c, d
 
-        
 
 if __name__ == "__main__":
     """
