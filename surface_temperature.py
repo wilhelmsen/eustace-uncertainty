@@ -13,21 +13,10 @@ Options:
   --log-filename=logfilename  Name of the log file.
 """
 import logging
-import docopt
-import math
 import coefficients
 import numpy as np
 
 LOG = logging.getLogger(__name__)
-args = docopt.docopt(__doc__, version="1.0")
-
-if args["--debug"]:
-    logging.basicConfig( filename=args["--log-filename"], level=logging.DEBUG )
-elif args["--verbose"]:
-    logging.basicConfig( filename=args["--log-filename"], level=logging.INFO )
-else:
-    logging.basicConfig( filename=args["--log-filename"], level=logging.WARNING )
-LOG.debug(args)
 
 class SstException(Exception):
     pass
@@ -46,13 +35,18 @@ class ST_ALGORITHM:
     MIZT_SST_IST_NIGHT = "MIZT_SST_IST_NIGHT"
 
 def sat_teta(sat_zenit_angle):
+    """
+    """
     return 1.0 / np.cos(np.radians(sat_zenit_angle)) - 1.0
 
 def validate_surface_temperature(t_surface, t11, t12):
     """
     Validate the surface temperature.
+    I.e. if some conditions are not set, the output is set to different
+    values outside the valid range.
     """
     if (t11-t12) > 2.0:
+        # The difference between t11 and t12 is too big.
         if 268.95 <= t11 and t11 < 270.95:
             # Indication that there might be ice fog.
             return 141.0
@@ -72,10 +66,17 @@ def validate_surface_temperature(t_surface, t11, t12):
         # Surface temperature too high.
         return 145.0
 
+    # No unvalid conditions were met...
     return t_surface
 
 
 def _get_day_state(sun_zenit_angle, t37):
+    """
+    Picks the state of the day, based on the angle.
+
+    Outputs:
+    Days, twilight, night.
+    """
     if sun_zenit_angle <= 90 or t37 is None:
         return DAY_STATE.DAY
     else:
@@ -86,6 +87,10 @@ def _get_day_state(sun_zenit_angle, t37):
 
 
 def select_surface_temperature_algorithm(sun_zenit_angle, t11, t37):
+    """
+    Selects which algorithm to use for different conditions.
+    """
+    # Gets the state of the day. Possible outputs are day, night, twilight.
     day_state = _get_day_state(sun_zenit_angle, t37)
 
     if t11 >= 268.95 and t11 < 270.95:
@@ -114,6 +119,18 @@ def select_surface_temperature_algorithm(sun_zenit_angle, t11, t37):
 def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim, sun_zenit_angle, sat_zenit_angle):
     """
     Get the surface temperature for a specific algorithm.
+
+    Algorithm used for the different conditions.
+    
+             DAY        TWILIGHT       NIGHT
+         +----------+--------------+------------+
+     SST | SST_DAY  | SST_TWILIGHT | SST_NIGHT  |
+         +----------+--------------+------------+
+    MIZT | MIZT_DAY |      ?       | MIZT_NIGHT |
+         +----------+--------------+------------+
+     IST |                IST                   |
+         +--------------------------------------+
+    
     """
     s_teta = sat_teta(sat_zenit_angle)
 
@@ -204,7 +221,7 @@ def sea_surface_temperature_twilight(coeff, t11, t12, t37, t_clim, s_teta, sun_z
 # ist svarer til s_nwc
 
 if __name__ == "__main__":
-    satellite_id = args['<sat-id>']
+    satellite_id = "noaa7"
     t11 = 262
     t12 = 261
     t37 = 261 
