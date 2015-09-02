@@ -3,8 +3,7 @@
 __doc__ = """Eustace uncertainity
 
 Usage:
-  eustace_uncertainity.py <sat-id> <data-filename> """ +
-"""[--speed=<kn>] [-d|-v] [options]
+  {filename} <sat-id> <data-filename> [--speed=<kn>] [-d|-v] [options]
 
 Options:
   -h --help                   Show this screen.
@@ -12,7 +11,7 @@ Options:
   -d, --debug                 Output a lot of info..
   -v, --verbose               Output less less info.
   --log-filename=logfilename  Name of the log file.
-"""
+""".format(filename=__file__)
 import logging
 import docopt
 import coefficients

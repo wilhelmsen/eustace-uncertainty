@@ -1,18 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-__doc__ = """Eustace uncertainity
-
-Usage:
-  eustace_uncertainity.py <sat-id> <data-filename>""" + \
-""" [--speed=<kn>] [-d|-v] [options]
-
-Options:
-  -h --help                   Show this screen.
-  --version                   Show version.
-  -d, --debug                 Output a lot of info..
-  -v, --verbose               Output less less info.
-  --log-filename=logfilename  Name of the log file.
-"""
 import logging
 import coefficients
 import numpy as np
