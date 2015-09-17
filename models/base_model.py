@@ -24,11 +24,11 @@ class BaseModel(object):
         raise NotImplementedError
 
     @abstractproperty
-    def ch3b(self):
+    def ch3a(self):
         raise NotImplementedError
 
     @abstractproperty
-    def ch3a(self):
+    def ch3b(self):
         raise NotImplementedError
 
     @abstractproperty
@@ -40,11 +40,11 @@ class BaseModel(object):
         raise NotImplementedError
 
     @abstractproperty
-    def lon(self):
+    def lat(self):
         raise NotImplementedError
 
     @abstractproperty
-    def lat(self):
+    def lon(self):
         raise NotImplementedError
 
     @abstractproperty
