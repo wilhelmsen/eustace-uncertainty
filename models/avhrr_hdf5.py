@@ -1,11 +1,11 @@
 import os
 import h5py
-from osgeo import gdal
+from base_model import BaseModel
 
 import logging
 LOG = logging.getLogger(__name__)
 
-class Hdf5(object):
+class Hdf5(BaseModel):
     def __init__(self, avhrr_filename, sunsatangle_filename, cloudmask_filename):
         self.avhrr_filename = avhrr_filename
         self.sunsatangle_filename = sunsatangle_filename
@@ -156,4 +156,3 @@ Options:
         print model.sun_zenit_angle
         print model.sat_zenit_angle
         print model.cloudmask
-        
