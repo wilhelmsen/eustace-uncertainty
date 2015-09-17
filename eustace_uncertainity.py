@@ -17,7 +17,6 @@ import docopt
 import coefficients
 import numpy as np
 import surface_temperature
-import h5py
 
 
 LOG = logging.getLogger(__name__)
@@ -32,37 +31,9 @@ else:
 LOG.debug(args)
 
 
-def get_sat_id_from_hdf5_file(filename):
-    f = h5py.File(filename)
-    try:
-        return f['how'].attrs['platform']
-    finally:
-        f.close()
-    
-
-def get_hdf5_values(filename, key, str_key):
-    f = h5py.File(filename)
-    try:
-        assert(f["%s/what"%(key)].attrs['product'] == str_key)
-        gain = f["%s/what"%(key)].attrs["gain"]
-        offset = f["%s/what"%(key)].attrs["offset"]
-        return f["%s/data"%(key)].value[0][0]*gain + offset
-    finally:
-        f.close()
-
-
 if __name__ == "__main__":
     # satellite_id = args["<sat-id>"]
     sun_sat_angle_filename = args['<sun-sat-angles-filename>']
-    satellite_id = get_sat_id_from_hdf5_file(sun_sat_angle_filename)
-
-    # Sun zenit angle:
-    key = "image1"
-    sun_zenit_angle = get_hdf5_values(sun_sat_angle_filename, "image1", "SUNZ")
-    print sun_zenit_angle
-    sat_zenit_angle = get_hdf5_values(sun_sat_angle_filename, "image2", "SATZ")
-    print sat_zenit_angle
-    sys.exit()
 
     # t11 svarer til ch4
     # t12 svarer til ch5
