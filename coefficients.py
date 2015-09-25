@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 import os
-import numpy as np
-import config
 
 class CoefficientsException(Exception):
     pass
@@ -40,9 +38,9 @@ class Coefficients(object):
                 if line.split()[0] == self.sat_id:
                     for header, value in zip(headers, line.split()):
                         try:
-                            self.__dict__[header] = float(value)
+                            self.__dict__[header.replace("-", "_")] = float(value)
                         except ValueError:
-                            self.__dict__[header] = value
+                            self.__dict__[header.replace("-", "_")] = value
                     sat_found = True
                     break
             assert(sat_found)

@@ -9,8 +9,10 @@ LOG = logging.getLogger(__name__)
 
 class Db:
     def __init__(self, db_filename):
-        self.conn = sqlite3.connect(db_filename)
+        self.db_filename = db_filename
+        self.conn = sqlite3.connect(self.db_filename)
         self.c = self.conn.cursor()
+        # TODO: Create tables.
 
     def __enter__(self):
         LOG.debug("Entering db.")
@@ -41,6 +43,14 @@ class Db:
                       (sql, where_values))
             for row in self.c.execute(sql, where_values):
                 yield row
+
+    def insert(self, surface_temperature_truth_K, t11_K, t12_K, t37_K,
+               satellite_id, algorithm, time, sat_zenit_angle, sun_zenit_angle,
+               ice_concentration, cloud_mask, epsilon_1, epsilon_2, epsilon_3,
+               st_new):
+        pass
+        
+        
 
 if __name__ == "__main__":
     # Create tables.

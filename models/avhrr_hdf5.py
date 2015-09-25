@@ -1,5 +1,6 @@
 import os
 import h5py
+import numpy as np
 from base_model import BaseModel
 
 import logging
@@ -14,6 +15,7 @@ class Hdf5(BaseModel):
         self.avhrr_file = h5py.File(self.avhrr_filename, 'r')
         self.sunsatangle_file = h5py.File(self.sunsatangle_filename, 'r')
         self.cloudmask_file = h5py.File(self.cloudmask_filename, 'r')
+        self.cache = {}
 
     def __enter__(self):
         return self
@@ -35,12 +37,23 @@ class Hdf5(BaseModel):
         except:
             LOG.error("Could not close cloud mask file.")
 
+    def __repr__(self):
+        return "Measurements from %s" % self.satellite_id
+
     def _get_data(self, data_file, key):
         """
         Getting the data from the key from the specified data file.
         """
-        d = data_file[key]
-        return d["data"].value * d["what"].attrs["gain"] + d["what"].attrs["offset"]
+        if not self.cache.has_key(key):
+            d = data_file[key]
+            data_values = d["data"].value
+            
+            no_data_mask = data_values == d["what"].attrs["nodata"]
+            missing_data_mask = data_values == d["what"].attrs["missingdata"]
+            false_data_mask = no_data_mask | missing_data_mask
+            data_values = np.where(false_data_mask, np.NaN, data_values)
+            self.cache[key] = data_values * d["what"].attrs["gain"] + d["what"].attrs["offset"]
+        return self.cache[key]
         
     def _get_avhrr_data(self, key):
         """
@@ -145,14 +158,14 @@ Options:
 
     LOG.info(args)
     with Hdf5(args["<avhrr_filename>"], args["<sunsatangle-filename>"], args["<cloudmask-filename>"]) as model:
+        print model.satellite_id
         print model
         print model.ch3b
         print model.ch3a
         print model.ch1
         print model.ch2
-        print model.satellite_id
-        print model.lat
-        print model.lon
         print model.sun_zenit_angle
         print model.sat_zenit_angle
         print model.cloudmask
+        print model.lat
+        print model.lon
