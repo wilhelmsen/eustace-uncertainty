@@ -71,7 +71,7 @@ def _get_day_state(sun_zenit_angle, t37):
     Outputs:
     Days, twilight, night.
     """
-    if sun_zenit_angle <= 90 or t37 is None:
+    if sun_zenit_angle <= 90 or t37 is None or np.isnan(t37):
         return DAY_STATE.DAY
     else:
         if sun_zenit_angle < 110:
@@ -224,7 +224,7 @@ def sea_surface_temperature_night(coeff, t11, t12, t37, s_teta):
     """
     # If t37 is zero, we should never have gone in here...
     # Then something is wrong in the selection process.
-    assert(t37 is not None)
+    assert(t37 is not None and not np.isnan(t37))
     a_n, b_n, c_n, d_n, e_n, f_n, cor_n \
         = coeff.get_sst_night_coefficients(s_teta)
     return (
@@ -276,7 +276,7 @@ if __name__ == "__main__":
            == ST_ALGORITHM.SST_DAY)
 
     t11 = 269
-    t37 = None
+    t37 = np.NaN
     assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37)
            == ST_ALGORITHM.MIZT_SST_IST_DAY)
 
