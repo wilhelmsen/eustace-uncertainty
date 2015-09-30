@@ -3,7 +3,8 @@
 # Built in.
 import logging
 LOG = logging.getLogger(__name__)
-import multiprocessing
+import datetime
+import random
 
 # Third party
 import numpy as np
@@ -73,19 +74,28 @@ Options:
             nc_st = nc_file.variables['surface_temperature'][0]
             nc_sst = nc_file.variables['sea_surface_temperature'][0]
 
+            sigma_1 = 0.01
+            sigma_2 = 0.02
+            sigma_3 = 0.03
+
+            number_of_perturbations = 10
+
             max_error = 0
             st_count = 0
             counter = 0
             started = 0
 
-            number_of_cpus = multiprocessing.cpu_count()
-            output_queue = multiprocessing.Queue()
+            random.seed(1)
 
+            start_time = datetime.datetime.now()
             with coefficients.Coefficients(avhrr_model.satellite_id) as coeff:
-                with eustace.db.Db("/tmp/noaa.sqlite3"):
+                # Creating ramdisk:
+                # mkdir /tmp/ramdisk
+                # mount -t tmpfs -o size=512m tmpfs /tmp/ramdisk
+                with eustace.db.Db("/tmp/ramdisk/eustace_uncertainty.sqlite3") as db:
                     for row_index in np.arange(avhrr_model.lon.shape[0]):
-
-                        print "ROW:", row_index
+                        print "ROW:", row_index, "st_count", st_count, "time", datetime.datetime.now() - start_time,\
+                            "st. pr. seconds", st_count / (datetime.datetime.now() - start_time).total_seconds()
                         for col_index in np.arange(avhrr_model.lon.shape[1]):
                             counter += 1
 
@@ -104,7 +114,7 @@ Options:
                                     raise
 
                             # Input temperatures.
-                            t37_K = np.NaN # Default not a number.
+                            t37_K = np.NaN  # Default not a number.
                             if not np.isnan(avhrr_model.ch3b[row_index, col_index]):
                                 # If t37 actually is a temp, put it in here!
                                 t37_K = avhrr_model.ch3b[row_index, col_index]
@@ -128,27 +138,57 @@ Options:
                             # Missing climatology
                             t_clim_K = t11_K
 
-                            # Pick algorithm.
-                            algorithm = surface_temperature.select_surface_temperature_algorithm(
-                                sun_zenit_angle,
-                                t11_K,
-                                t37_K)
+                            swath_input_id = db.insert_swath_values(
+                                str(avhrr_model.satellite_id),
+                                surface_temp=float(true_st_K),
+                                t_11=float(t11_K),
+                                t_12=float(t12_K),
+                                sat_zenit_angle=float(sat_zenit_angle),
+                                sun_zenit_angle=float(sun_zenit_angle),
+                                cloud_mask=int(avhrr_model.cloudmask[row_index, col_index]),
+                                swath_datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                lat=float(avhrr_model.lat[row_index, col_index]),
+                                lon=float(avhrr_model.lon[row_index, col_index])
+                                )
+                            
+                            for i in range(number_of_perturbations):
+                                perturbed_t11_K = random.gauss(t11_K, sigma_1)
+                                perturbed_t12_K = random.gauss(t12_K, sigma_2)
+                                perturbed_t37_K = random.gauss(t37_K, sigma_3) \
+                                    if t37_K is None or np.isnan(t37_K) else np.NaN
 
-                            # Calculate the temperature.
-                            st_K = surface_temperature.get_surface_temperature(algorithm,
-                                                                           coeff,
-                                                                           t11_K,
-                                                                           t12_K,
-                                                                           t37_K,
-                                                                           t_clim_K,
-                                                                           sun_zenit_angle,
-                                                                           sat_zenit_angle)
-                        
-                            resulting_st_K[row_index, col_index] = round(st_K, 2)
+                                # Pick algorithm.
+                                algorithm = surface_temperature.select_surface_temperature_algorithm(
+                                    sun_zenit_angle,
+                                    t11_K,
+                                    t37_K)
+
+                                # Calculate the temperature.
+                                st_K = round(
+                                    surface_temperature.get_surface_temperature(algorithm,
+                                                                                coeff,
+                                                                                t11_K,
+                                                                                t12_K,
+                                                                                t37_K,
+                                                                                t_clim_K,
+                                                                                sun_zenit_angle,
+                                                                                sat_zenit_angle),
+                                    2)
+
+
+                                db.insert_perturbation_values(swath_input_id, algorithm,
+                                                              epsilon_1 = float(perturbed_t11_K-t11_K),
+                                                              epsilon_2 = float(perturbed_t12_K-t12_K),
+                                                              epsilon_3 = float(perturbed_t37_K-t37_K),
+                                                              surface_temp = st_K)
+                                st_count += 1
+                            # db.conn.commit()
+
+                            # resulting_st_K[row_index, col_index] = round(st_K, 2)
+                            
                         
                             # errors[row_index, col_index].mask = True
-                            errors[row_index, col_index] = round(st_K, 2) - true_st_K # resulting_st_K[row_index, col_index] - true_st_K
-                            st_count += 1
+                            #errors[row_index, col_index] = round(st_K, 2) - true_st_K # resulting_st_K[row_index, col_index] - true_st_K
 
             print "Antal lat/lon:", counter
             print "Antal st'er:", st_count
@@ -158,7 +198,7 @@ Options:
             print "Max error:", np.ma.max(errors)
 
             
-            if True:
+            if False:
                 print "Creating plot"
                 n, bins, patches = pylab.hist(errors, 50, range=(np.min(errors), np.max(errors)))
                 plt.title("st_K - true_st_K")
