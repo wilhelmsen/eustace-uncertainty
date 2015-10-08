@@ -5,10 +5,12 @@ import tempfile
 import sqlite3
 import logging
 
-
 # Define the logger
 LOG = logging.getLogger(__name__)
-_ID_CACHE = {"satellite_id": {} }
+
+# Temp structure that should be removed.
+# Valid values to insert into the different tables. There are more values in the tables, and this functionality
+# should be removed when the structure is more decided.
 _SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenit_angle", "sun_zenit_angle", "ice_concentration", "cloud_mask", "swath_datetime", "lat", "lon"]
 _PERTURBATION_KEYS = ["epsilon_1", "epsilon_2", "epsilon_3", "surface_temp"]
 
@@ -122,6 +124,22 @@ class Db:
         value_string = ", ?"*len(kwargs)
         sql = "INSERT INTO perturbations (swath_input_id, algorithm, %s) VALUES (%i, '%s'%s)" % (variable_string, swath_input_id, algorithm_name, value_string)
         self.execute(sql, kwargs.values())
+
+
+    def get_perturbed_statistics(self, variable):
+        result = {}
+        sql = "SELECT algorithm, AVG({variable}) AS AVG, AVG({variable}*{variable}) - AVG({variable})*AVG({variable}) AS variance FROM perturbations GROUP BY algorithm;".format(variable=variable)
+        print sql
+        for row in self.get_rows(sql):
+            result[row[0]] = [row[1], row[2]]
+        return result
+        
+    def get_perturbed_values(self, swath_variables):
+        sql = "SELECT p.surface_temp - s.surface_temp, {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id".format(swath_variables_string=", ".join(swath_variables))
+        print sql
+        for row in self.get_rows(sql):
+            yield row
+            
         
         
 if __name__ == "__main__":
