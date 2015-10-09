@@ -33,9 +33,9 @@ def sat_teta(sat_zenit_angle):
     return 1.0 / np.cos(np.radians(sat_zenit_angle)) - 1.0
 
 
-def validate_surface_temperature(t_surface, t11, t12):
+def sanity_check_surface_temperature(t_surface, t11, t12):
     """
-    Validate the surface temperature.
+    Sanity checkking the surface temperature.
     I.e. if some conditions are not set, the output is set to different
     values outside the valid range.
     """
@@ -43,22 +43,25 @@ def validate_surface_temperature(t_surface, t11, t12):
         # The difference between t11 and t12 is too big.
         if 268.95 <= t11 and t11 < 270.95:
             # Indication that there might be ice fog.
-            return 141.0
+            # return 141.0
+            pass
+
         if t11 >= 270.95:
             # Indication that there might be ice fog.
-            return 142.0
+            #return 142.0
+            pass
 
     if t_surface < t11:
         # The surface temperature should not be greater than the T11
-        return 140
+        return np.NaN # 140
 
     if t_surface < 150.0:
         # Surface temperature too low
-        return 144.0
+        return np.NaN # 144.0
 
     if t_surface > 350.0:
         # Surface temperature too high.
-        return 145.0
+        return np.NaN # 145.0
 
     # No unvalid conditions were met...
     return t_surface
@@ -130,34 +133,38 @@ def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim,
          +---------------------------------------+
     """
     s_teta = sat_teta(sat_zenit_angle)
+    st = None
 
     if st_algorithm == ST_ALGORITHM.SST_DAY:
-        return sea_surface_temperature_day(coeff, t11, t12, t_clim, s_teta)
+        st = sea_surface_temperature_day(coeff, t11, t12, t_clim, s_teta)
 
-    if st_algorithm == ST_ALGORITHM.SST_NIGHT:
-        return sea_surface_temperature_night(coeff, t11, t12, t37, s_teta)
+    elif st_algorithm == ST_ALGORITHM.SST_NIGHT:
+        st = sea_surface_temperature_night(coeff, t11, t12, t37, s_teta)
 
-    if st_algorithm == ST_ALGORITHM.SST_TWILIGHT:
-        return sea_surface_temperature_twilight(coeff, t11, t12, t37, t_clim,
+    elif st_algorithm == ST_ALGORITHM.SST_TWILIGHT:
+        st = sea_surface_temperature_twilight(coeff, t11, t12, t37, t_clim,
                                                 s_teta, sun_zenit_angle)
 
-    if st_algorithm == ST_ALGORITHM.IST:
-        return ice_surface_temperature(coeff, t11, t12, s_teta)
+    elif st_algorithm == ST_ALGORITHM.IST:
+        st = ice_surface_temperature(coeff, t11, t12, s_teta)
 
-    if st_algorithm == ST_ALGORITHM.MIZT_SST_IST_DAY:
-        return marginal_ice_zone_temperature_day(coeff, t11, t12, t_clim,
+    elif st_algorithm == ST_ALGORITHM.MIZT_SST_IST_DAY:
+        st= marginal_ice_zone_temperature_day(coeff, t11, t12, t_clim,
                                                  s_teta)
 
-    if st_algorithm == ST_ALGORITHM.MIZT_SST_IST_NIGHT:
-        return marginal_ice_zone_temperature_night(coeff, t11, t12, t37,
+    elif st_algorithm == ST_ALGORITHM.MIZT_SST_IST_NIGHT:
+        st = marginal_ice_zone_temperature_night(coeff, t11, t12, t37,
                                                    s_teta)
 
-    if st_algorithm == ST_ALGORITHM.MIZT_SST_IST_TWILIGHT:
-        return marginal_ice_zone_temperature_twilight(coeff, t11, t12, t37,
+    elif st_algorithm == ST_ALGORITHM.MIZT_SST_IST_TWILIGHT:
+        st = marginal_ice_zone_temperature_twilight(coeff, t11, t12, t37,
                                                       t_clim, s_teta,
                                                       sun_zenit_angle)
+    else:
+        raise SstException("Unknown sst algorithm, '%s'." % (str(st_algorithm)))
 
-    raise SstException("Unknown sst algorithm, '%s'." % (str(st_algorithm)))
+    return sanity_check_surface_temperature(st, t11, t12)
+    
 
 
 def ice_surface_temperature(coeff, t11, t12, s_teta):

@@ -20,38 +20,6 @@ import models.avhrr_hdf5
 import coefficients
 import eustace.db
 
-"""
-def calculate_sst(queue, number_of_perturbations, col_index, t11_K, t12_K, t37_K, t_clim_K, sun_zenit_angle, sat_zenit_angle, coeff):
-    random.seed(1)
-    for i in range(number_of_perturbations):
-        perturbed_t11_K = random.gauss(t11_K, sigma_1)
-        perturbed_t12_K = random.gauss(t12_K, sigma_2)
-        perturbed_t37_K = random.gauss(t37_K, sigma_3) \
-            if t37_K is None or np.isnan(t37_K) else np.NaN
-        
-        # Pick algorithm.
-        algorithm = surface_temperature.select_surface_temperature_algorithm(
-            sun_zenit_angle,
-            perturbed_t11_K,
-            perturbed_t37_K)
-        
-        # Calculate the temperature.
-        st_K = round(
-            surface_temperature.get_surface_temperature(algorithm,
-                                                        coeff,
-                                                        t11_K,
-                                                        t12_K,
-                                                        t37_K,
-                                                        t_clim_K,
-                                                        sun_zenit_angle,
-                                                        sat_zenit_angle),
-            2)
-
-
-
-
-    queue.put([row_index, col_index, algorithm, st])
-   """ 
 
 if __name__ == "__main__":
     import docopt
@@ -59,15 +27,16 @@ if __name__ == "__main__":
 File: {filename}
 
 Usage:
-  {filename} <truth-filename> <avhrr-filename> <sunsatangle-filename> <cloudmask-filename> [-d|-v]
+  {filename} <database_filename> <truth-filename> <avhrr-filename> <sunsatangle-filename> <cloudmask-filename> [-d|-v] [options]
   {filename} (-h | --help)
   {filename} --version
 
 Options:
-  -h --help     Show this screen.
-  --version     Show version.
-  -v --verbose  Show some diagostics.
-  -d --debug    Show some more diagostics.
+  -h --help                         Show this screen.
+  --version                         Show version.
+  -v --verbose                      Show some diagostics.
+  -d --debug                        Show some more diagostics.
+  --number-of-perturbations = NoP   The number of perturbations per pixel, [default: 10].
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')
     print args
@@ -97,8 +66,6 @@ Options:
             sigma_2 = 0.12
             sigma_3 = 0.12
 
-            number_of_perturbations = 10
-
             max_error = 0
             st_count = 0
             counter = 0
@@ -113,7 +80,7 @@ Options:
                 # Creating ramdisk:
                 # mkdir /tmp/ramdisk
                 # mount -t tmpfs -o size=2048m tmpfs /tmp/ramdisk
-                with eustace.db.Db("/tmp/ramdisk/eustace_uncertainty_%i_perturbations.sqlite3" % (number_of_perturbations)) as db:
+                with eustace.db.Db(args["<database_filename>"] ) as db:
                     for row_index in np.arange(avhrr_model.lon.shape[0]):
                         print "ROW:", row_index, "st_count", st_count, "time", datetime.datetime.now() - start_time,\
                             "st. pr. seconds", st_count / (datetime.datetime.now() - start_time).total_seconds()
@@ -164,14 +131,11 @@ Options:
                             if lat is None or np.isnan(lat) or lon is None or np.isnan(lon):
                                 continue
 
-
-
                             # Pick algorithm.
                             algorithm = surface_temperature.select_surface_temperature_algorithm(
                                 sun_zenit_angle,
                                 t11_K,
                                 t37_K)
-
 
                             # Calculate the temperature.
                             st_truth_K = surface_temperature.get_surface_temperature(algorithm,
@@ -183,11 +147,13 @@ Options:
                                                                                      sun_zenit_angle,
                                                                                      sat_zenit_angle)
 
-                            
-                            
+                            if np.isnan(st_truth_K):
+                                # No need to do more for this pixel, if the output is not a number.
+                                continue
+
                             swath_input_id = db.insert_swath_values(
                                 str(avhrr_model.satellite_id),
-                                surface_temp= st_truth_K, # float(true_st_K),
+                                surface_temp=st_truth_K, # float(true_st_K),
                                 t_11=float(t11_K),
                                 t_12=float(t12_K),
                                 sat_zenit_angle=sat_zenit_angle,
@@ -199,11 +165,13 @@ Options:
                                 )
                             
              
-                            for i in range(number_of_perturbations):
+                            # Do the perturbations...
+                            for i in range(int(args["--number-of-perturbations"])):
                                 perturbed_t11_K = random.gauss(t11_K, sigma_1)
                                 perturbed_t12_K = random.gauss(t12_K, sigma_2)
                                 perturbed_t37_K = random.gauss(t37_K, sigma_3) \
                                     if t37_K is None or np.isnan(t37_K) else np.NaN
+
                                 # Missing climatology
 
 
@@ -223,6 +191,10 @@ Options:
                                                                                    sun_zenit_angle,
                                                                                    sat_zenit_angle)
 
+
+                                if np.isnan(st_K):
+                                    # No need to do more for this pixel, if the output is not a number.
+                                    continue
 
                                 db.insert_perturbation_values(swath_input_id, algorithm,
                                                               epsilon_1 = float(perturbed_t11_K-t11_K),

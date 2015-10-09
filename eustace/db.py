@@ -85,7 +85,6 @@ class Db:
         self.execute(sql, values)
         self.conn.commit()
 
-
     def get_rows(self, sql, where_values=None):
         if where_values is None or len(where_values) == 0:
             LOG.debug("Executing SQL: '%s'." % (sql))
@@ -95,7 +94,6 @@ class Db:
             LOG.debug("Executing SQL: '%s' with values: '%s'." % (sql, where_values))
             for row in self.c.execute(sql, where_values):
                 yield row
-
 
     def insert_swath_values(self, satellite_name, **kwargs):
         """
@@ -135,7 +133,7 @@ class Db:
         return result
         
     def get_perturbed_values(self, swath_variables):
-        sql = "SELECT p.surface_temp - s.surface_temp, {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id".format(swath_variables_string=", ".join(swath_variables))
+        sql = "SELECT p.surface_temp - s.surface_temp, {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id LIMIT 10000".format(swath_variables_string=", ".join(swath_variables))
         print sql
         for row in self.get_rows(sql):
             yield row
@@ -146,4 +144,3 @@ if __name__ == "__main__":
     with Db("/tmp/fisk.db") as db:
         for sql in sql_list:
             db.execute(sql)
-            
