@@ -142,6 +142,7 @@ Options:
                              each of the axes will be divided into. [default: 201].
   --y-min=y-min              Set the minimum y value in the plots. [default: -2]
   --y-max=y-max              Set the maximum y value in the plots. [default:  2]
+  --limit=limit              Limit the number of pixels to get from the database.
 
 Example:
   python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloud_mask" "s.t_11 - s.t_12"
@@ -159,6 +160,7 @@ Example:
     # import sys; sys.exit()
 
     variables = args["<variables>"]
+    limit = None if args["--limit"] is None else int(args["--limit"])
     number_of_x_bins = int(args["--interval-bins"])
     number_of_y_bins = int(args["--interval-bins"])
     y = []
@@ -166,9 +168,10 @@ Example:
     for variable in variables:
         x[variable]=[]
 
+
     # Get the values from the database.
     with eustace.db.Db(args["<database-filename>"]) as db:
-        for row in db.get_perturbed_values(variables):
+        for row in db.get_perturbed_values(variables, limit=limit):
             y.append(row[0])
             for i in range(len(variables)):
                 if row[i + 1] == None:
@@ -313,6 +316,7 @@ Example:
         fig.subplots_adjust(right=0.75)
 
         filename = "/tmp/ramdisk/euastace_%s.png" % (variable)
+        filename = filename.replace(" ", "_")
         LOG.debug("Save the figure to '%s'." % filename)
         plt.savefig(filename, dpi=int(args['--dpi']))
         LOG.info("'%s' saved." % filename)

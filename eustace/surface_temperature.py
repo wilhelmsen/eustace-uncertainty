@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 import logging
-import coefficients
+import eustace.coefficients
 import numpy as np
 
 LOG = logging.getLogger(__name__)
@@ -289,7 +289,7 @@ if __name__ == "__main__":
 
     t11 = t12
     t37 = t12
-    with coefficients.Coefficients(satellite_id) as coeff:
+    with eustace.coefficients.Coefficients(satellite_id) as coeff:
         print get_surface_temperature(ST_ALGORITHM.IST, coeff, t11, t12, t37,
                                       t_clim, sun_zenit_angle, sat_zenit_angle)
         print get_surface_temperature(ST_ALGORITHM.SST_DAY, coeff, t11, t12,

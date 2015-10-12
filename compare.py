@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pylab
 
 # Own.
-import surface_temperature
+import eustace.surface_temperature
 import models.avhrr_hdf5
 import coefficients
 import eustace.db
@@ -87,6 +87,7 @@ Options:
                         for col_index in np.arange(avhrr_model.lon.shape[1]):
                             counter += 1
 
+                            """
                             true_st_K = nc_st[row_index, col_index]
                             if not isinstance(true_st_K, np.float32):
                                 # If the value is a float, it has no mask, and the value
@@ -100,6 +101,7 @@ Options:
                                 except Exception:
                                     print LOG.error("Unhandled data...")
                                     raise
+                            """
 
                             # Input temperatures.
                             t37_K = np.NaN  # Default not a number.
@@ -132,13 +134,13 @@ Options:
                                 continue
 
                             # Pick algorithm.
-                            algorithm = surface_temperature.select_surface_temperature_algorithm(
+                            algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
                                 sun_zenit_angle,
                                 t11_K,
                                 t37_K)
 
                             # Calculate the temperature.
-                            st_truth_K = surface_temperature.get_surface_temperature(algorithm,
+                            st_truth_K = eustace.surface_temperature.get_surface_temperature(algorithm,
                                                                                      coeff,
                                                                                      t11_K,
                                                                                      t12_K,
@@ -176,13 +178,13 @@ Options:
 
 
                                 # Pick algorithm.
-                                algorithm = surface_temperature.select_surface_temperature_algorithm(
+                                algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
                                     sun_zenit_angle,
                                     perturbed_t11_K,
                                     perturbed_t37_K)
 
                                 # Calculate the temperature.
-                                st_K = surface_temperature.get_surface_temperature(algorithm,
+                                st_K = eustace.surface_temperature.get_surface_temperature(algorithm,
                                                                                    coeff,
                                                                                    perturbed_t11_K,
                                                                                    perturbed_t12_K,

@@ -7,7 +7,7 @@ class CoefficientsException(Exception):
 
 
 class Coefficients(object):
-    DEFAULT_COEFFICIENT_FILE = "calibration_nh_ktuned_20140814.txt"
+    DEFAULT_COEFFICIENT_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "calibration_nh_ktuned_20140814.txt")
 
     def __init__(self,
                  sat_id,

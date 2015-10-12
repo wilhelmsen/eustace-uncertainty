@@ -2,6 +2,7 @@ import os
 import h5py
 import numpy as np
 from base_model import BaseModel
+import eustace.surface_temperature
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class Hdf5(BaseModel):
             missing_data_mask = data_values == d["what"].attrs["missingdata"]
             false_data_mask = no_data_mask | missing_data_mask
             data_values = np.where(false_data_mask, np.NaN, data_values)
+
             self.cache[key] = data_values * d["what"].attrs["gain"] + d["what"].attrs["offset"]
         return self.cache[key]
         
@@ -69,7 +71,10 @@ class Hdf5(BaseModel):
 
     @property
     def satellite_id(self):
-        return self.avhrr_file['how'].attrs['platform']
+        key = "satetllite_id"
+        if not self.cache.has_key(key):
+            self.cache[key] = self.avhrr_file['how'].attrs['platform']
+        return self.cache[key]
 
     @property
     def sun_zenit_angle(self):
@@ -128,7 +133,10 @@ class Hdf5(BaseModel):
 
     @property
     def cloudmask(self):
-        return self.cloudmask_file['cloudmask'].value
+        key = "cloudmask"
+        if not self.cache.has_key(key):
+            self.cache[key] = self.cloudmask_file['cloudmask'].value
+        return self.cache[key]
 
 
 if __name__ == "__main__":
@@ -158,6 +166,20 @@ Options:
 
     LOG.info(args)
     with Hdf5(args["<avhrr_filename>"], args["<sunsatangle-filename>"], args["<cloudmask-filename>"]) as model:
+        print len(model.cloudmask)
+        idx = np.where(model.cloudmask == 3)
+        # print idx
+        for i in range(len(idx[0])):
+            print model.cloudmask[idx[i][0]][idx[i][1]], \
+                model.ch4[idx[i][0]][idx[i][1]], \
+                model.ch5[idx[i][0]][idx[i][1]], \
+                model.ch3b[idx[i][0]][idx[i][1]]
+            import pdb; pdb.set_trace()
+
+
+
+        import sys; sys.exit()
+
         print model.satellite_id
         print model
         print model.ch3b
