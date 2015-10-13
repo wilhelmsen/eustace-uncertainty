@@ -1,4 +1,5 @@
 import os
+import datetime
 import h5py
 import numpy as np
 from base_model import BaseModel
@@ -138,6 +139,12 @@ class Hdf5(BaseModel):
             self.cache[key] = self.cloudmask_file['cloudmask'].value
         return self.cache[key]
 
+    @property
+    def swath_datetime(self):
+        key = "datetime"
+        if not self.cache.has_key(key):
+            self.cache[key] = datetime.datetime.strptime("-".join(os.path.basename(self.avhrr_filename).split("_")[1:3]), "%Y%m%d-%H%M")
+        return self.cache[key]
 
 if __name__ == "__main__":
     import docopt

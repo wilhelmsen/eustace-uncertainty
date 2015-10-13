@@ -62,9 +62,9 @@ Options:
             nc_st = nc_file.variables['surface_temperature'][0]
             nc_sst = nc_file.variables['sea_surface_temperature'][0]
 
-            sigma_1 = 0.12
-            sigma_2 = 0.12
-            sigma_3 = 0.12
+            sigma_11 = 0.12
+            sigma_12 = 0.12
+            sigma_37 = 0.12
 
             max_error = 0
             st_count = 0
@@ -160,7 +160,7 @@ Options:
                                 t_12=float(t12_K),
                                 sat_zenit_angle=sat_zenit_angle,
                                 sun_zenit_angle=sun_zenit_angle,
-                                cloud_mask=int(avhrr_model.cloudmask[row_index, col_index]),
+                                cloudmask=int(avhrr_model.cloudmask[row_index, col_index]),
                                 swath_datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 lat=float(lat),
                                 lon=float(lon)
@@ -169,9 +169,9 @@ Options:
              
                             # Do the perturbations...
                             for i in range(int(args["--number-of-perturbations"])):
-                                perturbed_t11_K = random.gauss(t11_K, sigma_1)
-                                perturbed_t12_K = random.gauss(t12_K, sigma_2)
-                                perturbed_t37_K = random.gauss(t37_K, sigma_3) \
+                                perturbed_t11_K = random.gauss(t11_K, sigma_11)
+                                perturbed_t12_K = random.gauss(t12_K, sigma_12)
+                                perturbed_t37_K = random.gauss(t37_K, sigma_37) \
                                     if t37_K is None or np.isnan(t37_K) else np.NaN
 
                                 # Missing climatology

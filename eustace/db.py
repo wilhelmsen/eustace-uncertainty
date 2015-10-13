@@ -11,8 +11,8 @@ LOG = logging.getLogger(__name__)
 # Temp structure that should be removed.
 # Valid values to insert into the different tables. There are more values in the tables, and this functionality
 # should be removed when the structure is more decided.
-_SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenit_angle", "sun_zenit_angle", "ice_concentration", "cloud_mask", "swath_datetime", "lat", "lon"]
-_PERTURBATION_KEYS = ["epsilon_12", "epsilon_12", "epsilon_37", "surface_temp"]
+_SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenit_angle", "sun_zenit_angle", "ice_concentration", "cloudmask", "swath_datetime", "lat", "lon"]
+_PERTURBATION_KEYS = ["epsilon_11", "epsilon_12", "epsilon_37", "surface_temp"]
 
 
 class Db:
@@ -28,7 +28,7 @@ class Db:
            sat_zenit_angle REAL NOT NULL,
            sun_zenit_angle REAL NOT NULL,
            ice_concentration REAL,
-           cloud_mask INT NOT NULL,
+           cloudmask INT NOT NULL,
            swath_datetime DATETIME NOT NULL,
            lat REAL NOT NULL,
            lon REAL NOT NULL
@@ -44,7 +44,7 @@ class Db:
            id INT PRIMARY KEY,
            swath_input_id INT NOT NULL,
            algorithm TEXT NOT NULL,
-           epsilon_12 REAL NOT NULL,
+           epsilon_11 REAL NOT NULL,
            epsilon_12 REAL NOT NULL,
            epsilon_37,
            surface_temp REAL NOT NULL,

@@ -145,7 +145,7 @@ Options:
   --limit=limit              Limit the number of pixels to get from the database.
 
 Example:
-  python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloud_mask" "s.t_11 - s.t_12"
+  python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
 
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')

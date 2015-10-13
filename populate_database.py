@@ -6,6 +6,8 @@ LOG = logging.getLogger(__name__)
 import datetime
 import random
 import multiprocessing
+import glob
+import os
 
 # Third party
 import numpy as np
@@ -17,50 +19,28 @@ import pylab
 # Own.
 import eustace.surface_temperature
 import models.avhrr_hdf5
-import coefficients
+import eustace.coefficients
 import eustace.db
+import eustace.sigmas
 
+def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename, cloudmask_filename, number_of_perturbations):
+    LOG.info("db_filename:          %s" % (database_filename))
+    LOG.info("avhrr_filename:       %s" % (avhrr_filename))
+    LOG.info("sunsatangle_filename: %s" % (sunsatangle_filename))
+    LOG.info("cloudmask_filename:   %s" % (cloudmask_filename))
 
-if __name__ == "__main__":
-    import docopt
-    __doc__ = """
-File: {filename}
-
-Usage:
-  {filename} <database_filename> <avhrr-filename> <sunsatangle-filename> <cloudmask-filename> [-d|-v] [options]
-  {filename} (-h | --help)
-  {filename} --version
-
-Options:
-  -h --help                         Show this screen.
-  --version                         Show version.
-  -v --verbose                      Show some diagostics.
-  -d --debug                        Show some more diagostics.
-  --number-of-perturbations = NoP   The number of perturbations per pixel, [default: 10].
-""".format(filename=__file__)
-    args = docopt.docopt(__doc__, version='0.1')
-    print args
-    if args["--debug"]:
-        logging.basicConfig(level=logging.DEBUG)
-    elif args["--verbose"]:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig(level=logging.WARNING)
-    LOG.info(args)
-
-    with models.avhrr_hdf5.Hdf5(args["<avhrr-filename>"],
-                                args["<sunsatangle-filename>"],
-                                args["<cloudmask-filename>"]) as avhrr_model:
-        print avhrr_model
+    with models.avhrr_hdf5.Hdf5(avhrr_filename,
+                                sun_sat_angle_filename,
+                                cloudmask_filename) as avhrr_model:
+        LOG.info(avhrr_model)
         assert(avhrr_model.lat.shape == avhrr_model.lon.shape)
         resulting_st_K = np.ma.masked_all_like(avhrr_model.lat)
 
-        sigma_1 = 0.12
-        sigma_2 = 0.12
-        sigma_3 = 0.12
+        sigmas = eustace.sigmas.get_sigmas(avhrr_model.satellite_id)
+        LOG.info(sigmas)
 
         max_error = 0
-        total_st_count = 0
+        total_perturbed_st_count = 0
         parent_st_count = 0
         counter = 0
         started = 0
@@ -70,20 +50,19 @@ Options:
         output_queue = multiprocessing.Queue()
         
         start_time = datetime.datetime.now()
-        with coefficients.Coefficients(avhrr_model.satellite_id) as coeff:
+        with eustace.coefficients.Coefficients(avhrr_model.satellite_id) as coeff:
             # Creating ramdisk:
             # mkdir /tmp/ramdisk
-            # mount -t tmpfs -o size=2048m tmpfs /tmp/ramdisk
-            with eustace.db.Db(args["<database_filename>"] ) as db:
+            # mount -t tmpfs -o size=8192m tmpfs /tmp/ramdisk
+            with eustace.db.Db(database_filename) as db:
                 for row_index in np.arange(avhrr_model.lon.shape[0]):
-                    print "ROW:", row_index, "st_count", total_st_count, "time", datetime.datetime.now() - start_time,\
-                        "st. pr. seconds", total_st_count / (datetime.datetime.now() - start_time).total_seconds()
+                    LOG.info("ROW: %i.   total st_count: %i.   total_time: %s.   sts./sec: %f" % (row_index, total_perturbed_st_count, str(datetime.datetime.now() - start_time), (total_perturbed_st_count / (datetime.datetime.now() - start_time).total_seconds())))
                     for col_index in np.arange(avhrr_model.lon.shape[1]):
                         counter += 1
 
-                        cloud_mask = avhrr_model.cloud_mask[row_index, col_index] 
-                        if cloud_mask != 1 and cloud_mask != 4:
-                            LOG.info("Bad cloudmask: %i" % (cloudmask))
+                        cloudmask = avhrr_model.cloudmask[row_index, col_index] 
+                        if cloudmask != 1 and cloudmask != 4:
+                            LOG.debug("Bad cloudmask: %i" % (cloudmask))
                             continue
 
                         # T11 is channel 4.
@@ -140,50 +119,104 @@ Options:
                             t_12=float(t12_K),
                             sat_zenit_angle=sat_zenit_angle,
                             sun_zenit_angle=sun_zenit_angle,
-                            cloud_mask=int(avhrr_model.cloudmask[row_index, col_index]),
-                            swath_datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            cloudmask=int(avhrr_model.cloudmask[row_index, col_index]),
+                            swath_datetime=avhrr_model.swath_datetime,
                             lat=float(lat),
                             lon=float(lon)
                             )
                         
-                        
-                        # Do the perturbations...
-                        for i in range(int(args["--number-of-perturbations"])):
-                            perturbed_t11_K = random.gauss(t11_K, sigma_1)
-                            perturbed_t12_K = random.gauss(t12_K, sigma_2)
-                            perturbed_t37_K = random.gauss(t37_K, sigma_3) \
-                                if np.isnan(t37_K) else np.NaN
-                            
-                            # Pick algorithm.
-                            algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
-                                sun_zenit_angle,
-                                perturbed_t11_K,
-                                perturbed_t37_K)
 
-                            # Calculate the temperature.
-                            st_K = eustace.surface_temperature.get_surface_temperature(algorithm,
-                                                                                       coeff,
-                                                                                       perturbed_t11_K,
-                                                                                       perturbed_t12_K,
-                                                                                       perturbed_t37_K,
-                                                                                       t_clim_K,
-                                                                                       sun_zenit_angle,
-                                                                                       sat_zenit_angle)
+                        perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(coeff,
+                                                                                                number_of_perturbations,
+                                                                                                t11_K,
+                                                                                                t12_K,
+                                                                                                t37_K,
+                                                                                                t_clim_K,
+                                                                                                sigmas["sigma_11"],
+                                                                                                sigmas["sigma_12"],
+                                                                                                sigmas["sigma_37"],
+                                                                                                sun_zenit_angle,
+                                                                                                sat_zenit_angle,
+                                                                                                random_seed=counter)
 
+                        for algorithm, epsilon_11, epsilon_12, epsilon_37, st_K in perturbations:
                             if np.isnan(st_K):
-                                # No need to do more for this pixel, if the output is not a number.
+                                # No need to do more for this perturbation, if the output is not a number.
                                 continue
-
+                                
                             db.insert_perturbation_values(swath_input_id, algorithm,
-                                                          epsilon_11 = float(perturbed_t11_K-t11_K),
-                                                          epsilon_12 = float(perturbed_t12_K-t12_K),
-                                                          epsilon_37 = float(perturbed_t37_K-t37_K),
+                                                          epsilon_11 = epsilon_11,
+                                                          epsilon_12 = epsilon_12,
+                                                          epsilon_37 = epsilon_37,
                                                           surface_temp = st_K)
-                            total_st_count += 1
+                            total_perturbed_st_count += 1
 
                         db.conn.commit()
                         parent_st_count += 1
 
-            print "Antal lat/lon:", counter
-            print "Antal st'er:", total_st_count
-            print "Antal parents:", parent_st_count
+            LOG.info("Counter %i" % (counter))
+            LOG.info("Antal st'er: %i" % (total_perturbed_st_count))
+            LOG.info("Antal parents: %i" % (parent_st_count))
+
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    import docopt
+    __doc__ = """
+File: {filename}
+
+Usage:
+  {filename} <database-filename> (<satellite-id> [<data-directory>] | <avhrr-filename> <sunsatangle-filename> <cloudmask-filename>) [-d|-v] [options]
+  {filename} (-h | --help)
+  {filename} --version
+
+Options:
+  -h --help                         Show this screen.
+  --version                         Show version.
+  -v --verbose                      Show some diagostics.
+  -d --debug                        Show some more diagostics.
+  --number-of-perturbations = NoP   The number of perturbations per pixel, [default: 10].
+""".format(filename=__file__)
+    args = docopt.docopt(__doc__, version='0.1')
+    if args["--debug"]:
+        logging.basicConfig(level=logging.DEBUG)
+    elif args["--verbose"]:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+    LOG.info(args)
+
+    if args["<satellite-id>"] is not None:
+        LOG.info(args["<satellite-id>"])
+        if args["<data-directory>"] is None:
+            args["<data-directory>"] = os.path.curdir
+
+        # Getting all avhrr files with satellite id in name from data directory.
+        avhrr_files = glob.glob(os.path.join(args["<data-directory>"], "*%s*avhrr*" % (args["<satellite-id>"])))
+        for avhrr_filename in avhrr_files:
+            file_id = avhrr_filename.rsplit("_", 1)[0]
+            cloudmask_filename = "%s_cloudmask.h5" % file_id
+            sunsatangle_filename = "%s_sunsatangles.h5" % file_id
+            populate_from_files(args["<database-filename>"],
+                                avhrr_filename,
+                                sunsatangle_filename,
+                                cloudmask_filename,
+                                int(args["--number-of-perturbations"]))
+            
+# avhrr_files = glob.glob(os.path.join(dirname, "%s*avhrr*"%()))
+
+
+    else:
+        populate_from_files(args["<database-filename>"],
+                            args["<avhrr-filename>"],
+                            args["<sunsatangle-filename>"],
+                            args["<cloudmask-filename>"],
+                            int(args["--number-of-perturbations"]))
+        

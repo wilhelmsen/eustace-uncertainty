@@ -1,0 +1,13 @@
+##1 COMMENT LINE ONLY ::  NOAA_SAT   Sigma_37  Sigma_11  Sigma_12 	
+noaa6	0.1	0.09
+noaa7	1.0	0.1	0.15		
+noaa9	0.3	0.04	0.06
+noaa11	0.2	0.03	0.05
+noaa12	0.2	0.06	0.05
+noaa14	0.18	0.04	0.06
+noaa15	0.11	0.04	0.06 
+noaa16	0.06	0.07	0.09
+noaa17	0.03	0.06	0.06
+noaa18	0.05	0.06	0.06
+noaa19	0.09	0.06	0.06
+metop02	0.01	0.06	0.06 

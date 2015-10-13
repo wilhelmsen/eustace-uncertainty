@@ -3,6 +3,7 @@
 import logging
 import eustace.coefficients
 import numpy as np
+import random
 
 LOG = logging.getLogger(__name__)
 
@@ -259,6 +260,52 @@ def surface_temperature_twilight(st_day, st_night, sun_zenit_angle):
         ((sun_zenit_angle - 110) * (-0.05) * st_day)
         + ((sun_zenit_angle - 90) * (0.05) * st_night)
         )
+
+
+def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K, t12_K, t37_K, t_clim_K, sigma_11, sigma_12, sigma_37, sat_zenit_angle, sun_zenit_angle, random_seed=None):
+    """
+    Getting n number of perturbed temperatures.
+    Runs through a gauss with the temperature as mean and sigma as std.
+    """
+    if random_seed is not None:
+        # Set the seed if given.
+        random.seed(random_seed)
+
+    perturbations = []
+    for i in range(number_of_perturbations):
+        # Calculate the gauss.
+        perturbed_t11_K = random.gauss(t11_K, sigma_11)
+        perturbed_t12_K = random.gauss(t12_K, sigma_12)
+        perturbed_t37_K = random.gauss(t37_K, sigma_37) \
+            if np.isnan(t37_K) else np.NaN
+    
+        # Pick algorithm for the perturbed value.
+        algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
+            sun_zenit_angle,
+            perturbed_t11_K,
+            perturbed_t37_K)
+
+        # Calculate the perturbed temperature.
+        st_K = eustace.surface_temperature.get_surface_temperature(algorithm,
+                                                                   coeff,
+                                                                   perturbed_t11_K,
+                                                                   perturbed_t12_K,
+                                                                   perturbed_t37_K,
+                                                                   t_clim_K,
+                                                                   sun_zenit_angle,
+                                                                   sat_zenit_angle)
+        # Append the result to the list of permutations.
+        perturbations.append((algorithm,
+                              perturbed_t11_K-t11_K, # epsilon_11,
+                              perturbed_t12_K-t12_K, # epsilon_12,
+                              perturbed_t37_K-t37_K, # epsilon_37,
+                              st_K))
+    return perturbations
+
+
+
+
+
 
 
 # GAC svarer til noaa
