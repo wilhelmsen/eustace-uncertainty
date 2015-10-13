@@ -199,9 +199,9 @@ Options:
                                     continue
 
                                 db.insert_perturbation_values(swath_input_id, algorithm,
-                                                              epsilon_1 = float(perturbed_t11_K-t11_K),
-                                                              epsilon_2 = float(perturbed_t12_K-t12_K),
-                                                              epsilon_3 = float(perturbed_t37_K-t37_K),
+                                                              epsilon_11 = float(perturbed_t11_K-t11_K),
+                                                              epsilon_12 = float(perturbed_t12_K-t12_K),
+                                                              epsilon_37 = float(perturbed_t37_K-t37_K),
                                                               surface_temp = st_K)
                                 st_count += 1
                             db.conn.commit()

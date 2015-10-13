@@ -12,7 +12,7 @@ LOG = logging.getLogger(__name__)
 # Valid values to insert into the different tables. There are more values in the tables, and this functionality
 # should be removed when the structure is more decided.
 _SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenit_angle", "sun_zenit_angle", "ice_concentration", "cloud_mask", "swath_datetime", "lat", "lon"]
-_PERTURBATION_KEYS = ["epsilon_1", "epsilon_2", "epsilon_3", "surface_temp"]
+_PERTURBATION_KEYS = ["epsilon_12", "epsilon_12", "epsilon_37", "surface_temp"]
 
 
 class Db:
@@ -44,9 +44,9 @@ class Db:
            id INT PRIMARY KEY,
            swath_input_id INT NOT NULL,
            algorithm TEXT NOT NULL,
-           epsilon_1 REAL NOT NULL,
-           epsilon_2 REAL NOT NULL,
-           epsilon_3,
+           epsilon_12 REAL NOT NULL,
+           epsilon_12 REAL NOT NULL,
+           epsilon_37,
            surface_temp REAL NOT NULL,
            FOREIGN KEY(swath_input_id) REFERENCES swath_inputs(id)
         )""",
