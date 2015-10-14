@@ -23,6 +23,10 @@ import eustace.coefficients
 import eustace.db
 import eustace.sigmas
 
+def running_perturbations_in_multiprocessor(output):
+    
+
+
 def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename, cloudmask_filename, number_of_perturbations):
     LOG.info("db_filename:          %s" % (database_filename))
     LOG.info("avhrr_filename:       %s" % (avhrr_filename))
@@ -48,18 +52,31 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
         random.seed(1)
 
         output_queue = multiprocessing.Queue()
-        
+        number_of_cpus = multiprocessing.cpu_count()
+
         start_time = datetime.datetime.now()
         with eustace.coefficients.Coefficients(avhrr_model.satellite_id) as coeff:
-            # Creating ramdisk:
+            ## Creating ramdisk:
             # mkdir /tmp/ramdisk
-            # mount -t tmpfs -o size=8192m tmpfs /tmp/ramdisk
+            #
+            ## A 3Gb ram disk.
+            # mount -t tmpfs -o size=3072m tmpfs /tmp/ramdisk
+            #
+            ## or
+            #
+            ## For a 12Gb ram disk.
+            # mount -t tmpfs -o size=$((12 * 1024))m tmpfs /tmp/ramdisk
             with eustace.db.Db(database_filename) as db:
+
+                # Rows.
                 for row_index in np.arange(avhrr_model.lon.shape[0]):
+                    # Some diagnostics while running.
                     LOG.info("ROW: %i.   total st_count: %i.   total_time: %s.   sts./sec: %f" % (row_index, total_perturbed_st_count, str(datetime.datetime.now() - start_time), (total_perturbed_st_count / (datetime.datetime.now() - start_time).total_seconds())))
+                    # Cols.
                     for col_index in np.arange(avhrr_model.lon.shape[1]):
                         counter += 1
 
+                        # Reading in the values.
                         cloudmask = avhrr_model.cloudmask[row_index, col_index] 
                         if cloudmask != 1 and cloudmask != 4:
                             LOG.debug("Bad cloudmask: %i" % (cloudmask))
@@ -68,7 +85,7 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                         # T11 is channel 4.
                         t11_K = avhrr_model.ch4[row_index, col_index]
 
-                        # T11 is channel 5.
+                        # T12 is channel 5.
                         t12_K = avhrr_model.ch5[row_index, col_index]
 
                         # T37 is channel 3b.
@@ -84,9 +101,10 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                         sun_zenit_angle = float(avhrr_model.sun_zenit_angle[row_index, col_index])
                         sat_zenit_angle = float(avhrr_model.sat_zenit_angle[row_index, col_index])
 
-                        # Missing climatology
+                        # Missing climatology. Using t11_K in stead.
                         t_clim_K = t11_K
 
+                        # Lat / lon.
                         lat = avhrr_model.lat[row_index, col_index]
                         lon = avhrr_model.lon[row_index, col_index]
                         if lat is None or np.isnan(lat) or lon is None or np.isnan(lon):
@@ -124,7 +142,6 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             lat=float(lat),
                             lon=float(lon)
                             )
-                        
 
                         perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(coeff,
                                                                                                 number_of_perturbations,
@@ -182,7 +199,8 @@ Options:
   --version                         Show version.
   -v --verbose                      Show some diagostics.
   -d --debug                        Show some more diagostics.
-  --number-of-perturbations = NoP   The number of perturbations per pixel, [default: 10].
+  --number-of-perturbations=<NoP>   The number of perturbations per pixel, [default: 10].
+  --result-directory=<directory>    Where to put the database after run.
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')
     if args["--debug"]:
@@ -193,6 +211,8 @@ Options:
         logging.basicConfig(level=logging.WARNING)
     LOG.info(args)
 
+    number_of_perturbations = int(args["--number-of-perturbations"])
+
     if args["<satellite-id>"] is not None:
         LOG.info(args["<satellite-id>"])
         if args["<data-directory>"] is None:
@@ -200,6 +220,9 @@ Options:
 
         # Getting all avhrr files with satellite id in name from data directory.
         avhrr_files = glob.glob(os.path.join(args["<data-directory>"], "*%s*avhrr*" % (args["<satellite-id>"])))
+        if len(avhrr_files) == 0:
+            raise RuntimeException("No %s files in %s." % (args["<satellite-id>"], args["<data-directory>"]))
+
         for avhrr_filename in avhrr_files:
             file_id = avhrr_filename.rsplit("_", 1)[0]
             cloudmask_filename = "%s_cloudmask.h5" % file_id
@@ -208,15 +231,22 @@ Options:
                                 avhrr_filename,
                                 sunsatangle_filename,
                                 cloudmask_filename,
-                                int(args["--number-of-perturbations"]))
-            
-# avhrr_files = glob.glob(os.path.join(dirname, "%s*avhrr*"%()))
-
-
+                                number_of_perturbations)
     else:
         populate_from_files(args["<database-filename>"],
                             args["<avhrr-filename>"],
                             args["<sunsatangle-filename>"],
                             args["<cloudmask-filename>"],
-                            int(args["--number-of-perturbations"]))
-        
+                            number_of_perturbations)
+
+    if args["--result-directory"] is not None:
+        LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"], args["--result-directory"]))
+        if not os.path.isdir(args["--result-directory"]):
+            raise RuntimeException("%s does not exist " % args["--result-directory"])
+
+        os.rename(arg["<database-filename>"],
+                  os.path.join(args["--result-directory"],
+                               os.path.basename(arg["<database-filename>"])
+                               )
+                  )
+

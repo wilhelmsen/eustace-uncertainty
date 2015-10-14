@@ -20,6 +20,8 @@ def get_sigmas(satellite_id):
                     key = key.lower()
                     try:
                         sigmas[key] = float(line_parts[i])
+                    except IndexError, e:
+                        sigmas[key] = None
                     except Exception, e:
                         sigmas[key] = line_parts[i]
                 return sigmas
