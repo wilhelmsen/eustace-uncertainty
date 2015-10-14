@@ -10,17 +10,15 @@ import datetime
 
 LOG = logging.getLogger(__name__)
 
-def get_bin_indexes(x_intervals, y_intervals, x, y):
-    assert(x_intervals is not None)
-    assert(y_intervals is not None)
-    x_index = np.min(np.where((x <= x_intervals) == True))
-    y_index = np.min(np.where((y <= y_intervals) == True))
-    return x_index, y_index
+def get_bin_index(interval_centers, value):
+    return np.abs(interval_centers - value).argmin()
 
+def get_bin_indexes(x_interval_centers, y_interval_centers, x, y):
+    return get_bin_index(x_interval_centers, x), get_bin_index(y_interval_centers, y)
 
-def count(bin_counter, x_intervals, y_intervals, x, y):
+def count(bin_counter, x_interval_centers, y_interval_centers, x, y):
     assert(bin_counter is not None)
-    x_index, y_index = get_bin_indexes(x_intervals, y_intervals, x, y)
+    x_index, y_index = get_bin_indexes(x_interval_centers, y_interval_centers, x, y)
 
     try:
         bin_counter[x_index][y_index] += 1
@@ -31,82 +29,55 @@ def count(bin_counter, x_intervals, y_intervals, x, y):
             bin_counter[x_index] = {}
             bin_counter[x_index][y_index] = 1
 
-def get_color_array_(x_array, y_array, number_of_x_bins, number_of_y_bins):
-    assert(len(x_array) == len(y_array))
-    
-    t = datetime.datetime.now()
 
-    x_intervals = np.linspace(np.min(x_array), np.max(x_array), number_of_x_bins)
-    y_intervals = np.linspace(np.min(y_array), np.max(y_array), number_of_y_bins)
-    bin_counter = {}
-
-    LOG.debug("Counting, and inserting into bins.")
-    for x, y in zip(x_array, y_array):
-        count(bin_counter, x_intervals, y_intervals, x, y)
-    LOG.debug("Took, %s" % (str(datetime.datetime.now() - t)))
-
-    LOG.debug("Creating color array")
-    t = datetime.datetime.now()
-    color_array = np.empty_like(x_array)
-    for i in range(len(x_array)):
-        x_i, y_i = get_bin_indexes(x_intervals, y_intervals, x_array[i], y_array[i])
-        color_array[i] = bin_counter[x_i][y_i]
-    LOG.debug("Took, %s" % (str(datetime.datetime.now() - t)))
-
-    return color_array
+def increment_bins(bins, x_idx, y_idx):
+    if bins.has_key(x_idx):
+        if bins[x_idx].has_key(y_idx):
+            bins[x_idx][y_idx] += 1
+        else:
+            bins[x_idx][y_idx] = 1
+    else:
+        bins[x_idx] = {}    
+        bins[x_idx][y_idx] = 1
 
 
-def get_stats_and_colors(x_array, y_array, x_intervals, y_intervals):
+def get_x_stats(x_array, y_array, x_interval_centers, offset):
     assert(len(x_array) == len(y_array))
     
     # Time it...
     t = datetime.datetime.now()
+    LOG.debug("Setup get_stats...")
 
-    LOG.debug("Setup")
-
-    colors = np.empty_like(x_array)
-    averages = np.empty_like(x_intervals)
-    stds = np.empty_like(x_intervals)
+    averages = []
+    standard_deviations = []
     
     LOG.debug("Setup took: %s" % (str(datetime.datetime.now() - t)))
     t = datetime.datetime.now()
 
-    LOG.debug("Counting, and inserting into bins.")
-    for x_i in range(len(x_intervals)-1):
-        t = datetime.datetime.now()
-        x_min = x_intervals[x_i]
-        x_max = x_intervals[x_i + 1]
+    LOG.debug("Getting x stats and inserting into bins...")
+    t = datetime.datetime.now()
+    for x_center in x_interval_centers:
+        x_min = x_center - offset
+        x_max = x_center + offset
 
         # Including minimum value, but not maximum value.
         x_mask = (x_array >= x_min) & (x_array < x_max)
 
-        if not x_mask.any():
-            averages[x_i] = np.NaN
-            stds[x_i] = np.NaN
-            continue
-
-        # Only calculate the stats if there are many values.
-
-        #import pdb; pdb.set_trace()
-        if len(x_array[x_mask]) < 50:
-            averages[x_i] = np.NaN
-            stds[x_i] = np.NaN
+        if not x_mask.any() or len(x_array[x_mask]) < 50:
+            averages.append(np.NaN)
+            standard_deviations.append(np.NaN)
         else:
-            averages[x_i] = np.average(y_array[x_mask])
-            stds[x_i] = np.std(y_array[x_mask])
+            averages.append(np.average(y_array[x_mask]))
+            standard_deviations.append(np.std(y_array[x_mask]))
 
-        # For every bin.
-        for y_i in range(len(y_intervals)-1):
-            y_min = y_intervals[y_i]
-            y_max = y_intervals[y_i + 1]
+    LOG.debug("get_x_stats took: %s" % (str(datetime.datetime.now() - t)))
+    return np.array(averages), np.array(standard_deviations)
 
-            # Including minimum value, but not maximum value.
-            mask = x_mask & (y_array >= y_min) & (y_array < y_max)
-            colors[np.where(mask)] = len(x_array[mask])
 
-        LOG.debug("Setting colors (%i) took: %s" % (x_i, str(datetime.datetime.now() - t)))
-
-    return colors, x_intervals, y_intervals, averages, stds
+def get_interval_centers(min_value, max_value, number_of_cells):
+    offset = (max_value - min_value)/float(number_of_cells)/2.0 
+    interval_centers = np.linspace(min_value, max_value, number_of_cells+1)
+    return offset, [i-offset for i in interval_centers[1:]]
 
 
 def get_axis_range(interval, padding_pct=1):
@@ -139,10 +110,11 @@ Options:
   --dpi=dp                   The dpi of the output image, [default: 72].
   --interval-bins=bins       Both the x-axis and the y-axis are divided into intervals that
                              creates a grid of cells. This is the number of small intervals
-                             each of the axes will be divided into. [default: 201].
-  --y-min=y-min              Set the minimum y value in the plots. [default: -2]
-  --y-max=y-max              Set the maximum y value in the plots. [default:  2]
+                             each of the axes will be divided into. [default: 200].
+  --y-min=y-min              Set the minimum y value in the plots. [default: -5]
+  --y-max=y-max              Set the maximum y value in the plots. [default:  5]
   --limit=limit              Limit the number of pixels to get from the database.
+  --grid                     Include grid in the plot.
 
 Example:
   python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
@@ -159,52 +131,81 @@ Example:
     LOG.info(args)
     # import sys; sys.exit()
 
-    variables = args["<variables>"]
+    variable_names = args["<variables>"]
     limit = None if args["--limit"] is None else int(args["--limit"])
     number_of_x_bins = int(args["--interval-bins"])
     number_of_y_bins = int(args["--interval-bins"])
-    y = []
-    x = {}
-    for variable in variables:
-        x[variable]=[]
+    y_array = []
 
+    x_arrays = {}
+    for variable in variable_names:
+        x_arrays[variable]=[]
 
+    import random
+    random.seed(1)
     # Get the values from the database.
     with eustace.db.Db(args["<database-filename>"]) as db:
-        for row in db.get_perturbed_values(variables, limit=limit):
-            y.append(row[0])
-            for i in range(len(variables)):
+        for row in db.get_perturbed_values(variable_names, limit=limit):
+            if random.random() > 0.03:
+                continue 
+            y_array.append(row[0])
+            
+            for i in range(len(variable_names)):
                 if row[i + 1] == None:
-                    x[variables[i]].append(np.NaN)
+                    x_arrays[variable_names[i]].append(np.NaN)
                 else:
-                    x[variables[i]].append(row[i + 1])
+                    x_arrays[variable_names[i]].append(row[i + 1])
 
-    LOG.info("%i samples" %(len(y)))
+    LOG.info("%i samples" %(len(y_array)))
+    y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
+    y_array = np.array(y_array)
+    y_offset, y_interval_centers = get_interval_centers(y_range_min, y_range_max, number_of_y_bins)
 
-    y_array = np.array(y)
-
-    for variable in variables:
-        LOG.debug("Plotting %s." % variable)
-        x_array = np.array(x[variable])
+    for variable_name in variable_names:
+        LOG.debug("Plotting %s." % variable_name)
+        x_array = np.array(x_arrays[variable_name])
 
         LOG.debug("Clearing plt")
         plt.clf()
         fig = plt.figure()
-        plt.title(r"$\mathtt{%s}$" % variable.replace("_", "\_"))
+        plt.title(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
+
+        x_offset, x_interval_centers = get_interval_centers(np.min(x_array), np.max(x_array), number_of_x_bins)
+
+        LOG.debug("Getting stats.")
+        averages, standard_deviations = get_x_stats(x_array, y_array, x_interval_centers, x_offset)
 
         LOG.debug("Getting color array.")
+        LOG.debug("Counting...")
+        t = datetime.datetime.now()
+        bins_count = {}
+        x_len = len(x_array)
+        for i, x_ in enumerate(x_array):
+            if i % 100000 == 0:
+                print i, "/", x_len
+            x_i = get_bin_index(x_interval_centers, x_array[i])
+            y_i = get_bin_index(y_interval_centers, y_array[i])
+            increment_bins(bins_count, x_i, y_i)
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
-        x_intervals = np.linspace(np.min(x_array), np.max(x_array), number_of_x_bins)
-        y_intervals = np.linspace(np.min(y_array), np.max(y_array), number_of_y_bins)
-        colors, x_intervals, y_intervals, averages, stds = get_stats_and_colors(x_array, y_array, x_intervals, y_intervals)
+        LOG.debug("Creating colors...")
+        t = datetime.datetime.now()
+        colors = np.empty_like(x_array)
+        for i, c in enumerate(colors):
+            if i % 100000 == 0:
+                print i, "/", x_len
+            x_i = get_bin_index(x_interval_centers, x_array[i])
+            y_i = get_bin_index(y_interval_centers, y_array[i])
+            colors[i] = bins_count[x_i][y_i]
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
+            
+        LOG.debug("Getting colors. Counting.")
 
         # Getting x-axis ranges.
-        x_range_min, x_range_max = get_axis_range(x_intervals)
-        y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
+        x_range_min, x_range_max = get_axis_range(x_interval_centers)
 
         # Define the image grid.
         gs = matplotlib.gridspec.GridSpec(3, 1, height_ratios=[1, 5, 1])
-
 
 
         ###################################
@@ -214,6 +215,7 @@ Example:
         
         # Set the image grid.
         ax = plt.subplot(gs[0])
+        ax.grid(args["--grid"])
 
         # Average for all values.
         average = np.average(y_array)
@@ -224,8 +226,8 @@ Example:
         plt.plot([x_range_min, x_range_max], [std, std], linewidth=0.1, color="black")
 
         # The average for each x axis interval.
-        plt.plot(x_intervals, averages, "b-", linewidth=0.5)
-        plt.plot(x_intervals, stds, "r-", linewidth=1)
+        plt.plot(x_interval_centers, averages, "b-", linewidth=0.5)
+        plt.plot(x_interval_centers, standard_deviations, "r-", linewidth=0.5)
 
         # Set the range of the xaxis.
         ax.set_xlim(x_range_min, x_range_max)
@@ -254,8 +256,6 @@ Example:
             label.set_visible(False)
 
 
-
-
         #############################
         #  The main (scatter) plot. #
         #############################
@@ -263,9 +263,10 @@ Example:
 
         # Set the image grid.
         ax = plt.subplot(gs[1])
+        ax.grid(args["--grid"])
 
         # Do the scatter plot.
-        plt.scatter(x[variable],
+        plt.scatter(x_array,
                     y_array,
                     s=0.1,
                     c=colors,
@@ -275,9 +276,9 @@ Example:
         color_bar = plt.colorbar()
 
         # Insert the statistics on top of the scatter plot.
-        plt.plot(x_intervals, averages, "-", color="black", linewidth=0.5)
-        plt.plot(x_intervals, averages-stds, "-", color="black", linewidth=0.5)
-        plt.plot(x_intervals, averages+stds, "-", color="black", linewidth=0.5)
+        plt.plot(x_interval_centers, averages, "-", color="black", linewidth=0.5)
+        plt.plot(x_interval_centers, averages-standard_deviations, "-", color="black", linewidth=0.5)
+        plt.plot(x_interval_centers, averages+standard_deviations, "-", color="black", linewidth=0.5)
 
         # Text on the y-axis.
         plt.ylabel(r'$\mathtt{st_{pert} (K) - st_{true} (K)}$')
@@ -287,14 +288,15 @@ Example:
         ax.set_ylim(y_range_min, y_range_max)
 
 
-
         #############
         # Histogram #
         #############
-        ax = plt.subplot(gs[2])
-        plt.xlabel(r"$\mathtt{%s}$" % variable.replace("_", "\_"))
+        ax = plt.subplot(gs[2]) 
+        ax.grid(args["--grid"])
+
+        plt.xlabel(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
         plt.ylabel(r"$\mathtt{N_{samples}}$")
-        n, bins, patches = plt.hist(x[variable],
+        n, bins, patches = plt.hist(x_array,
                                     number_of_x_bins,
                                     #alpha=0.5,
                                     )
@@ -311,11 +313,10 @@ Example:
             label.set_visible(False)
 
 
-
         # Align all the plots.
         fig.subplots_adjust(right=0.75)
 
-        filename = "/tmp/ramdisk/euastace_%s.png" % (variable)
+        filename = "/tmp/euastace_%s.png" % (variable_name)
         filename = filename.replace(" ", "_")
         LOG.debug("Save the figure to '%s'." % filename)
         plt.savefig(filename, dpi=int(args['--dpi']))
