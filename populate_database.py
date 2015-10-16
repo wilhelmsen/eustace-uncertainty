@@ -5,7 +5,7 @@ import logging
 LOG = logging.getLogger(__name__)
 import datetime
 import random
-import multiprocessing
+import multiprocessing as mp
 import glob
 import os
 
@@ -23,7 +23,37 @@ import eustace.coefficients
 import eustace.db
 import eustace.sigmas
 
-def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename, cloudmask_filename, number_of_perturbations):
+
+def perturbate_in_parallel(output_queue, swath_input_id,
+                           coeff, number_of_perturbations,
+                           t11_K, t12_K,
+                           t37_K, t_clim_K,
+                           sigma_11, sigma_12, sigma_37,
+                           sun_zenit_angle, sat_zenit_angle,
+                           random_seed=None):
+
+    p = mp.Process(target=perturbate,
+                   args=(output_queue, swath_input_id,
+                           coeff, number_of_perturbations,
+                           t11_K, t12_K,
+                           t37_K, t_clim_K,
+                           sigma_11, sigma_12, sigma_37,
+                           sun_zenit_angle, sat_zenit_angle),
+                   kwargs={"random_seed": random_seed})
+    p.start()
+    LOG.debug("%i started." % (swath_input_id))
+
+
+def perturbate(output_queue, swath_input_id, *args, **kwargs):
+    perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(*args, **kwargs)
+    output_queue.put((swath_input_id, perturbations))
+    LOG.debug("%i done" % (swath_input_id))
+
+
+def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename,
+                        cloudmask_filename, number_of_perturbations,
+                        run_in_parallel = False
+                        ):
     LOG.info("db_filename:          %s" % (database_filename))
     LOG.info("avhrr_filename:       %s" % (avhrr_filename))
     LOG.info("sunsatangle_filename: %s" % (sunsatangle_filename))
@@ -46,15 +76,16 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
 
         # Some book keeping...
         total_perturbed_st_count = 0
-        parent_st_count = 0
         counter = 0
 
         # Set the random seed, so that the results are the same
         # the next time the exact same system is is run.
         random.seed(1)
 
-        output_queue = multiprocessing.Queue()
-        number_of_cpus = multiprocessing.cpu_count()
+        output_queue = mp.Queue()
+        number_of_cpus = mp.cpu_count()
+        number_of_processes_started = 0
+        number_of_processes_finished = 0
 
         # Book keeping.
         start_time = datetime.datetime.now()
@@ -151,45 +182,62 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             lon=float(lon)
                             )
 
-                        perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(coeff,
-                                                                                                number_of_perturbations,
-                                                                                                t11_K,
-                                                                                                t12_K,
-                                                                                                t37_K,
-                                                                                                t_clim_K,
-                                                                                                sigmas["sigma_11"],
-                                                                                                sigmas["sigma_12"],
-                                                                                                sigmas["sigma_37"],
-                                                                                                sun_zenit_angle,
-                                                                                                sat_zenit_angle,
-                                                                                                random_seed=counter)
 
-                        for algorithm, epsilon_11, epsilon_12, epsilon_37, st_K in perturbations:
-                            if np.isnan(st_K):
-                                # No need to do more for this perturbation, if the output is not a number.
-                                continue
-                                
-                            db.insert_perturbation_values(swath_input_id, algorithm,
-                                                          epsilon_11 = epsilon_11,
-                                                          epsilon_12 = epsilon_12,
-                                                          epsilon_37 = epsilon_37,
-                                                          surface_temp = st_K)
-                            total_perturbed_st_count += 1
+                        if not run_in_parallel:
+                            # WARNING!
+                            # If the number of perturbations is a small number, it is much faster
+                            # to run sequencially!!
+                            perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(coeff,
+                                                                                                    number_of_perturbations,
+                                                                                                    t11_K,
+                                                                                                    t12_K,
+                                                                                                    t37_K,
+                                                                                                    t_clim_K,
+                                                                                                    sigmas["sigma_11"],
+                                                                                                    sigmas["sigma_12"],
+                                                                                                    sigmas["sigma_37"],
+                                                                                                    sun_zenit_angle,
+                                                                                                    sat_zenit_angle,
+                                                                                                    random_seed=counter)
+                            num_inserted = db.insert_many_perturbations(swath_input_id, perturbations)
+                            total_perturbed_st_count += num_inserted
 
-                        db.conn.commit()
-                        parent_st_count += 1
+                        else:
+                            # This starts a process running a number of perturbations
+                            # and inserts the result in the in the output queue.
+                            perturbate_in_parallel(output_queue,
+                                                   swath_input_id,
+                                                   coeff,
+                                                   number_of_perturbations,
+                                                   t11_K,
+                                                   t12_K,
+                                                   t37_K,
+                                                   t_clim_K,
+                                                   sigmas["sigma_11"],
+                                                   sigmas["sigma_12"],
+                                                   sigmas["sigma_37"],
+                                                   sun_zenit_angle,
+                                                   sat_zenit_angle,
+                                                   random_seed=counter)
+                            number_of_processes_started += 1
 
-            LOG.info("Counter %i" % (counter))
-            LOG.info("Antal st'er: %i" % (total_perturbed_st_count))
-            LOG.info("Antal parents: %i" % (parent_st_count))
+                            if number_of_processes_started > number_of_cpus:
+                                # Get will wait forever, for the process to finish.
+                                swath_input_id, perturbations = output_queue.get()
+                                number_of_processes_finished += 1
+                                num_inserted = db.insert_many_perturbations(swath_input_id, perturbations)
+                                total_perturbed_st_count += num_inserted
 
 
+                if run_in_parallel:
+                    while number_of_processes_started > number_of_processes_finished:
+                        swath_input_id, perturbations = output_queue.get()
+                        number_of_processes_finished += 1
+                        db.insert_many_perturbations(swath_input_id, perturbations)
 
-
-
-
-
-
+                # FIN.
+                LOG.info("Finished perturbing '%s'." % (avhrr_model.avhrr_filename))
+                    
 
 
 if __name__ == "__main__":
@@ -209,6 +257,7 @@ Options:
   -d --debug                        Show some more diagostics.
   --number-of-perturbations=<NoP>   The number of perturbations per pixel, [default: 10].
   --result-directory=<directory>    Where to put the database after run.
+  --perturbate-in-parallel          Running the perturbations in parallel.
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')
     if args["--debug"]:
@@ -239,13 +288,17 @@ Options:
                                 avhrr_filename,
                                 sunsatangle_filename,
                                 cloudmask_filename,
-                                number_of_perturbations)
+                                number_of_perturbations,
+                                args["--perturbate-in-parallel"]
+                                )
     else:
         populate_from_files(args["<database-filename>"],
                             args["<avhrr-filename>"],
                             args["<sunsatangle-filename>"],
                             args["<cloudmask-filename>"],
-                            number_of_perturbations)
+                            number_of_perturbations,
+                            args["--perturbate-in-parallel"]
+                            )
 
     if args["--result-directory"] is not None:
         LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"],

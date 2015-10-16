@@ -4,6 +4,7 @@ import os
 import tempfile
 import sqlite3
 import logging
+import numpy as np
 
 # Define the logger
 LOG = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ class Db:
         self.execute_and_commit(sql, kwargs.values())
         return self.c.lastrowid
 
+
     def insert_perturbation_values(self, swath_input_id, algorithm_name, **kwargs):
         # Make sure all the values actually exist in the databae.
         for k in kwargs.keys():
@@ -123,6 +125,21 @@ class Db:
         sql = "INSERT INTO perturbations (swath_input_id, algorithm, %s) VALUES (%i, '%s'%s)" % (variable_string, swath_input_id, algorithm_name, value_string)
         self.execute(sql, kwargs.values())
 
+    def insert_many_perturbations(self, swath_input_id, perturbations):
+        counter = 0
+        for algorithm, epsilon_11, epsilon_12, epsilon_37, st_K in perturbations:
+            if np.isnan(st_K) or st_K is None:
+                # No need to do more for this perturbation, if the output is not a number.
+                continue
+
+            self.insert_perturbation_values(swath_input_id, algorithm,
+                                            epsilon_11 = epsilon_11,
+                                            epsilon_12 = epsilon_12,
+                                            epsilon_37 = epsilon_37,
+                                            surface_temp = st_K)
+            counter += 1
+        self.conn.commit()
+        return counter
 
     def get_perturbed_statistics(self, variable):
         result = {}
