@@ -23,39 +23,45 @@ import eustace.coefficients
 import eustace.db
 import eustace.sigmas
 
-def running_perturbations_in_multiprocessor(output):
-    
-
-
 def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename, cloudmask_filename, number_of_perturbations):
     LOG.info("db_filename:          %s" % (database_filename))
     LOG.info("avhrr_filename:       %s" % (avhrr_filename))
     LOG.info("sunsatangle_filename: %s" % (sunsatangle_filename))
     LOG.info("cloudmask_filename:   %s" % (cloudmask_filename))
 
+
+    # Reading in the input file.
+    # The file is cached, so that when the values are read, they are read
+    # from memory, and not from the file system. This speeds up the
+    # calculations.
     with models.avhrr_hdf5.Hdf5(avhrr_filename,
                                 sun_sat_angle_filename,
                                 cloudmask_filename) as avhrr_model:
         LOG.info(avhrr_model)
         assert(avhrr_model.lat.shape == avhrr_model.lon.shape)
-        resulting_st_K = np.ma.masked_all_like(avhrr_model.lat)
 
+        # Get the sigma values based on the satellite id.
         sigmas = eustace.sigmas.get_sigmas(avhrr_model.satellite_id)
         LOG.info(sigmas)
 
-        max_error = 0
+        # Some book keeping...
         total_perturbed_st_count = 0
         parent_st_count = 0
         counter = 0
-        started = 0
 
+        # Set the random seed, so that the results are the same
+        # the next time the exact same system is is run.
         random.seed(1)
 
         output_queue = multiprocessing.Queue()
         number_of_cpus = multiprocessing.cpu_count()
 
+        # Book keeping.
         start_time = datetime.datetime.now()
+
+        # Using the coefficients based on the satellite id.
         with eustace.coefficients.Coefficients(avhrr_model.satellite_id) as coeff:
+            ## Using a ram disk speeds up the calculations, quite a lot.
             ## Creating ramdisk:
             # mkdir /tmp/ramdisk
             #
@@ -66,8 +72,10 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
             #
             ## For a 12Gb ram disk.
             # mount -t tmpfs -o size=$((12 * 1024))m tmpfs /tmp/ramdisk
+            #
+            #
+            ## Defining the database.
             with eustace.db.Db(database_filename) as db:
-
                 # Rows.
                 for row_index in np.arange(avhrr_model.lon.shape[0]):
                     # Some diagnostics while running.
@@ -240,13 +248,13 @@ Options:
                             number_of_perturbations)
 
     if args["--result-directory"] is not None:
-        LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"], args["--result-directory"]))
+        LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"],
+                                                             args["--result-directory"]))
         if not os.path.isdir(args["--result-directory"]):
             raise RuntimeException("%s does not exist " % args["--result-directory"])
 
-        os.rename(arg["<database-filename>"],
-                  os.path.join(args["--result-directory"],
-                               os.path.basename(arg["<database-filename>"])
-                               )
-                  )
+        output_filename = os.path.join(args["--result-directory"],
+                                       os.path.basename(arg["<database-filename>"]))
+        os.rename(arg["<database-filename>"], output_filename)
+        #LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"],
 
