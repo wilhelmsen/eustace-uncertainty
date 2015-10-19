@@ -141,7 +141,8 @@ class Db:
         self.conn.commit()
         return counter
 
-    def get_perturbed_statistics(self, variable):
+    """
+    def get_perturbed_statistics(self, variable, where=None):
         result = {}
         sql = "SELECT algorithm, AVG({variable}) AS AVG, AVG({variable}*{variable}) - AVG({variable})*AVG({variable}) AS variance FROM perturbations GROUP BY algorithm;".format(variable=variable)
 
@@ -149,9 +150,13 @@ class Db:
         for row in self.get_rows(sql):
             result[row[0]] = [row[1], row[2]]
         return result
-        
-    def get_perturbed_values(self, swath_variables, limit=None):
+       """
+ 
+    def get_perturbed_values(self, swath_variables, where_sql=None, limit=None):
         sql = "SELECT p.surface_temp - s.surface_temp, {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id".format(swath_variables_string=", ".join(swath_variables))
+        if where_sql is not None and where_sql.strip() != "":
+            sql += " WHERE %s" %(where_sql)
+
         if limit is not None:
             sql += " LIMIT %i" % (limit)
 

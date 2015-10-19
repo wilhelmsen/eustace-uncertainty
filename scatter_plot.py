@@ -7,6 +7,8 @@ import eustace.db
 import numpy as np
 import logging
 import datetime
+import random
+import os
 
 LOG = logging.getLogger(__name__)
 
@@ -74,7 +76,7 @@ def get_x_stats(x_array, y_array, x_interval_centers, offset):
     return np.array(averages), np.array(standard_deviations)
 
 
-def get_interval_centers(min_value, max_value, number_of_cells):
+def get_interval_center_points(min_value, max_value, number_of_cells):
     offset = (max_value - min_value)/float(number_of_cells)/2.0 
     interval_centers = np.linspace(min_value, max_value, number_of_cells+1)
     return offset, [i-offset for i in interval_centers[1:]]
@@ -98,7 +100,7 @@ if __name__ == "__main__":
 File: {filename}
 
 Usage:
-  {filename} <database-filename> [-d|-v] [options] <variables>...
+  {filename} <database-filename> [-d|-v] [--output-dir=<output-dir>] [options] <variables>...
   {filename} (-h | --help)
   {filename} --version
 
@@ -111,10 +113,13 @@ Options:
   --interval-bins=bins       Both the x-axis and the y-axis are divided into intervals that
                              creates a grid of cells. This is the number of small intervals
                              each of the axes will be divided into. [default: 200].
-  --y-min=y-min              Set the minimum y value in the plots. [default: -5]
-  --y-max=y-max              Set the maximum y value in the plots. [default:  5]
+  --y-min=y-min              Set the minimum y value in the plots [default: -5].
+  --y-max=y-max              Set the maximum y value in the plots [default:  5].
   --limit=limit              Limit the number of pixels to get from the database.
   --grid                     Include grid in the plot.
+  --output-dir=<output-dir>  Output directory.
+  --lat-lt=<lat>             Include lats less than.
+  --lat-gt=<lat>             Include lats greater than.
 
 Example:
   python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
@@ -141,11 +146,17 @@ Example:
     for variable in variable_names:
         x_arrays[variable]=[]
 
-    import random
+    where_sql_or = []
+    if args["--lat-lt"] is not None:
+        where_sql_or.append("s.lat < %s" % (args["--lat-lt"]))
+    if args["--lat-gt"] is not None:
+        where_sql_or.append("s.lat > %s" % (args["--lat-gt"]))
+    where_sql = " OR ".join(where_sql_or)
+        
     random.seed(1)
     # Get the values from the database.
     with eustace.db.Db(args["<database-filename>"]) as db:
-        for row in db.get_perturbed_values(variable_names, limit=limit):
+        for row in db.get_perturbed_values(variable_names, where_sql=where_sql, limit=limit):
             if random.random() > 0.03:
                 continue 
             y_array.append(row[0])
@@ -159,7 +170,7 @@ Example:
     LOG.info("%i samples" %(len(y_array)))
     y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
     y_array = np.array(y_array)
-    y_offset, y_interval_centers = get_interval_centers(y_range_min, y_range_max, number_of_y_bins)
+    y_offset, y_interval_centers = get_interval_center_points(y_range_min, y_range_max, number_of_y_bins)
 
     for variable_name in variable_names:
         LOG.debug("Plotting %s." % variable_name)
@@ -168,9 +179,9 @@ Example:
         LOG.debug("Clearing plt")
         plt.clf()
         fig = plt.figure()
-        plt.title(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
+        # plt.title(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
 
-        x_offset, x_interval_centers = get_interval_centers(np.min(x_array), np.max(x_array), number_of_x_bins)
+        x_offset, x_interval_centers = get_interval_center_points(np.min(x_array), np.max(x_array), number_of_x_bins)
 
         LOG.debug("Getting stats.")
         averages, standard_deviations = get_x_stats(x_array, y_array, x_interval_centers, x_offset)
@@ -215,15 +226,25 @@ Example:
         
         # Set the image grid.
         ax = plt.subplot(gs[0])
-        ax.grid(args["--grid"])
+        ax.grid(args["--grid"])  # Grid in the plot or not.
+
+        # Set the title.
+        title = os.path.basename(args["<database-filename>"]).replace(".sqlite3", "").replace("db", "")
+        title += ":\ %s" % variable_name.replace("_", "\_")
+        title = r"$\mathtt{%s}$" % title
+
+        if where_sql is not None and where_sql.strip() != "":
+            title += "\n" + r"$\mathtt{%s}$" % ( where_sql.replace(" ", "\ ") )
+
+        ax.set_title( title )
 
         # Average for all values.
-        average = np.average(y_array)
-        plt.plot([x_range_min, x_range_max], [average, average], linewidth=0.1, color="black")
+        average_all = np.average(y_array)
+        plt.plot([x_range_min, x_range_max], [average_all, average_all], linewidth=0.1, color="black")
 
         # Std for all values.
-        std = np.std(y_array)
-        plt.plot([x_range_min, x_range_max], [std, std], linewidth=0.1, color="black")
+        std_all = np.std(y_array)
+        plt.plot([x_range_min, x_range_max], [std_all, std_all], linewidth=0.1, color="black")
 
         # The average for each x axis interval.
         plt.plot(x_interval_centers, averages, "b-", linewidth=0.5)
@@ -234,12 +255,12 @@ Example:
         ax.set_ylim(y_range_min/4, y_range_max/2)
 
         # 5% out to the left.
-        ax.annotate('A: %0.2f' % (average), xy=(x_range_max, average), xycoords='data',
+        ax.annotate('A: %0.2f' % (average_all), xy=(x_range_max, average_all), xycoords='data',
                     xytext=(20, -5), textcoords='offset points',
                     arrowprops=dict(arrowstyle="->"),
                     annotation_clip=False)
 
-        ax.annotate('S: %0.2f' % (std), xy=(x_range_max, std), xycoords='data',
+        ax.annotate('S: %0.2f' % (std_all), xy=(x_range_max, std_all), xycoords='data',
                     xytext=(20, 5), textcoords='offset points',
                     arrowprops=dict(arrowstyle="->"),
                     annotation_clip=False)
@@ -291,15 +312,15 @@ Example:
         #############
         # Histogram #
         #############
-        ax = plt.subplot(gs[2]) 
-        ax.grid(args["--grid"])
+        ax = plt.subplot(gs[2])  # Last grid point. 
+        ax.grid(args["--grid"])  # Grid in the plot or not.
 
+        # Axis labels.
         plt.xlabel(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
         plt.ylabel(r"$\mathtt{N_{samples}}$")
-        n, bins, patches = plt.hist(x_array,
-                                    number_of_x_bins,
-                                    #alpha=0.5,
-                                    )
+
+        # Do the plot.
+        n, bins, patches = plt.hist(x_array, number_of_x_bins)
 
         # Set the range of the xaxis.
         ax.set_xlim(x_range_min, x_range_max)
@@ -313,14 +334,33 @@ Example:
             label.set_visible(False)
 
 
-        # Align all the plots.
+        ###################
+        # Saving the plot #
+        ###################
+
+        # Align all the sub plots.
         fig.subplots_adjust(right=0.75)
 
-        filename = "/tmp/euastace_%s.png" % (variable_name)
+        # Create a filename.
+        filename = "%s_%s.png" % (os.path.basename(args["<database-filename>"]),
+                                  variable_name)
+        # Replacing all spaces with underscores.
         filename = filename.replace(" ", "_")
+
+        # Append to output directory, if set.
+        if args["--output-dir"] is not None:
+            # Make sure that the output directory exits.
+            if not os.path.isdir(args["--output-dir"]):
+                # Create the output directory.
+                LOG.warning("Output directory, '%s', did not exist. Creating it." % args["--output-dir"])
+                os.makedirs(args["--output-dir"])
+
+            # Put the files in the output directory.
+            filename = os.path.join(args["--output-dir"], filename)
+
+        # Save to file.
         LOG.debug("Save the figure to '%s'." % filename)
         plt.savefig(filename, dpi=int(args['--dpi']))
         LOG.info("'%s' saved." % filename)
-
         # plt.show()
     
