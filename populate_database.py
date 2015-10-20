@@ -31,20 +31,27 @@ def perturbate_in_parallel(output_queue, swath_input_id,
                            sigma_11, sigma_12, sigma_37,
                            sun_zenit_angle, sat_zenit_angle,
                            random_seed=None):
-
+    """
+    Running the perturbations in parallel. This only seems to make
+    sense if the number of perturbations is large enough.
+    """
     p = mp.Process(target=perturbate,
                    args=(output_queue, swath_input_id,
-                           coeff, number_of_perturbations,
-                           t11_K, t12_K,
-                           t37_K, t_clim_K,
-                           sigma_11, sigma_12, sigma_37,
-                           sun_zenit_angle, sat_zenit_angle),
+                         coeff, number_of_perturbations,
+                         t11_K, t12_K,
+                         t37_K, t_clim_K,
+                         sigma_11, sigma_12, sigma_37,
+                         sun_zenit_angle, sat_zenit_angle),
                    kwargs={"random_seed": random_seed})
     p.start()
     LOG.debug("%i started." % (swath_input_id))
 
 
 def perturbate(output_queue, swath_input_id, *args, **kwargs):
+    """
+    Do the perturbations. For input arguments, see the
+    get_n_perturbed_temperatures
+    """
     perturbations = eustace.surface_temperature.get_n_perturbed_temeratures(*args, **kwargs)
     output_queue.put((swath_input_id, perturbations))
     LOG.debug("%i done" % (swath_input_id))
@@ -256,7 +263,7 @@ Options:
   -v --verbose                      Show some diagostics.
   -d --debug                        Show some more diagostics.
   --number-of-perturbations=<NoP>   The number of perturbations per pixel, [default: 10].
-  --result-directory=<directory>    Where to put the database after run.
+  --result-directory=<directory>    Put the result (the database file) into this directory if set.
   --perturbate-in-parallel          Running the perturbations in parallel.
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')
@@ -268,11 +275,19 @@ Options:
         logging.basicConfig(level=logging.WARNING)
     LOG.info(args)
 
-    number_of_perturbations = int(args["--number-of-perturbations"])
+    # Make sure the result directory exists, if set.
+    if args["--result-directory"] is not None and \
+            not os.path.isdir(args["--result-directory"]):
+        raise RuntimeError("The result directory must exist.")
 
+    # There are two options to populate the database, by <satellite-id>
+    # or by specifying the file names.
     if args["<satellite-id>"] is not None:
+        # Option 1: Populate by <satellite-id>.
         LOG.info(args["<satellite-id>"])
+
         if args["<data-directory>"] is None:
+            # if the data directory is not set, look in the current directory.
             args["<data-directory>"] = os.path.curdir
 
         # Getting all avhrr files with satellite id in name from data directory.
@@ -288,26 +303,36 @@ Options:
                                 avhrr_filename,
                                 sunsatangle_filename,
                                 cloudmask_filename,
-                                number_of_perturbations,
+                                int(args["--number-of-perturbations"]),
                                 args["--perturbate-in-parallel"]
                                 )
     else:
+        # Option 2: By specifying the filenames.
         populate_from_files(args["<database-filename>"],
                             args["<avhrr-filename>"],
                             args["<sunsatangle-filename>"],
                             args["<cloudmask-filename>"],
-                            number_of_perturbations,
-                            args["--perturbate-in-parallel"]
-                            )
+                            int(args["--number-of-perturbations"]),
+                            args["--perturbate-in-parallel"])
 
+    # The population actually gets slower when the perturbations run in parallel.
+    # This of course depends on hardware, but it may be quicker to run it serially.
+    # It may therefore be a good idéa to check which one is the fastest...x
+    if args["--perturbate-in-parallel"] and \
+            int(args["--number-of-perturbations"]) < 50:
+        LOG.warning("--perturbate-in-parallel may be slower for small number of perturbations. Make sure that it is actually beneficial! E.g. run a test with the option flag -v set to se the number of perturbations inserted into the database.")
+
+    # Put the result (the database file) into this directory if set.
+    # When using a RAM disk, it often gets filled up. Therefore the database file
+    # can be moved to a more permanent storage when finished.
     if args["--result-directory"] is not None:
         LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"],
                                                              args["--result-directory"]))
         if not os.path.isdir(args["--result-directory"]):
-            raise RuntimeException("%s does not exist " % args["--result-directory"])
+            raise RuntimeException("%s does not exist." % args["--result-directory"])
 
         output_filename = os.path.join(args["--result-directory"],
                                        os.path.basename(arg["<database-filename>"]))
         os.rename(arg["<database-filename>"], output_filename)
-        #LOG.info("Moving database '%s' filename to '%s'." % (args["<database-filename>"],
-
+        LOG.info("The database file '%s' was moved to '%s'." % (arg["<database-filename>"],
+                                                                output_filename))

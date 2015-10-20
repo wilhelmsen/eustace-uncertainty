@@ -262,7 +262,10 @@ def surface_temperature_twilight(st_day, st_night, sun_zenit_angle):
         )
 
 
-def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K, t12_K, t37_K, t_clim_K, sigma_11, sigma_12, sigma_37, sat_zenit_angle, sun_zenit_angle, random_seed=None):
+def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K,
+                                t12_K, t37_K, t_clim_K, sigma_11, sigma_12,
+                                sigma_37, sun_zenit_angle, sat_zenit_angle,
+                                random_seed=None):
     """
     Getting n number of perturbed temperatures.
     Runs through a gauss with the temperature as mean and sigma as std.
@@ -277,7 +280,7 @@ def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K, t12_K, t3
         perturbed_t11_K = random.gauss(t11_K, sigma_11)
         perturbed_t12_K = random.gauss(t12_K, sigma_12)
         perturbed_t37_K = random.gauss(t37_K, sigma_37) \
-            if np.isnan(t37_K) else np.NaN
+            if not np.isnan(t37_K) else np.NaN
     
         # Pick algorithm for the perturbed value.
         algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
@@ -299,7 +302,7 @@ def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K, t12_K, t3
                               perturbed_t11_K-t11_K, # epsilon_11,
                               perturbed_t12_K-t12_K, # epsilon_12,
                               perturbed_t37_K-t37_K, # epsilon_37,
-                              st_K))
+                              st_K))                 # st_perturbed_K
     return perturbations
 
 
