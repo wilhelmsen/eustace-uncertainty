@@ -3,7 +3,6 @@ import datetime
 import h5py
 import numpy as np
 from base_model import BaseModel
-import eustace.surface_temperature
 
 import logging
 LOG = logging.getLogger(__name__)

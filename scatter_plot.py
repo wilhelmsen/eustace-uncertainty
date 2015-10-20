@@ -42,6 +42,45 @@ def increment_bins(bins, x_idx, y_idx):
         bins[x_idx] = {}    
         bins[x_idx][y_idx] = 1
 
+def get_color_array(x_array_pruned, y_array_pruned, x_interval_centers, y_interval_centers):
+        LOG.debug("Getting color array.")
+        LOG.debug("Counting...")
+        t = datetime.datetime.now()
+        bins_count = {}
+        x_len = len(x_array_pruned)
+        for i, x_ in enumerate(x_array_pruned):
+            if i % 100000 == 0:
+                print i, "/", x_len
+            x_i = get_bin_index(x_interval_centers, x_array_pruned[i])
+            y_i = get_bin_index(y_interval_centers, y_array_pruned[i])
+            increment_bins(bins_count, x_i, y_i)
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
+
+
+        LOG.debug("Creating colors...")
+        t = datetime.datetime.now()
+        colors = np.empty_like(x_array_pruned)
+        for i, c in enumerate(colors):
+            if i % 100000 == 0:
+                print i, "/", x_len
+            x_i = get_bin_index(x_interval_centers, x_array_pruned[i])
+            y_i = get_bin_index(y_interval_centers, y_array_pruned[i])
+            colors[i] = bins_count[x_i][y_i]
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
+        return colors
+
+def randomly_prune(x_array, y_array, fraction_to_keep):
+        LOG.debug("Pruning the data for plot...")
+        t = datetime.datetime.now()
+        y_array_pruned = []
+        x_array_pruned = []
+        for i in np.arange(y_array_length):
+            if random.random() >= fraction_to_keep:
+                continue
+            y_array_pruned.append(y_array[i])
+            x_array_pruned.append(x_array[i])
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
+        return x_array_pruned, y_array_pruned
 
 def get_x_stats(x_array, y_array, x_interval_centers, offset):
     assert(len(x_array) == len(y_array))
@@ -154,11 +193,11 @@ Example:
     where_sql = " OR ".join(where_sql_or)
         
     random.seed(1)
-    # Get the values from the database.
+
+    LOG.debug("Get the values from the database.")
+    t = datetime.datetime.now()
     with eustace.db.Db(args["<database-filename>"]) as db:
         for row in db.get_perturbed_values(variable_names, where_sql=where_sql, limit=limit):
-            if random.random() > 0.03:
-                continue 
             y_array.append(row[0])
             
             for i in range(len(variable_names)):
@@ -166,12 +205,19 @@ Example:
                     x_arrays[variable_names[i]].append(np.NaN)
                 else:
                     x_arrays[variable_names[i]].append(row[i + 1])
+    LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
     LOG.info("%i samples" %(len(y_array)))
-    y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
     y_array = np.array(y_array)
-    y_offset, y_interval_centers = get_interval_center_points(y_range_min, y_range_max, number_of_y_bins)
 
+    average_all = np.average(y_array)
+    std_all = np.std(y_array)
+    y_array_length = len(y_array)
+    number_of_points_in_plot = 1e5
+    fraction_to_keep = min(number_of_points_in_plot/float(y_array_length), 1)
+    y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
+    y_offset, y_interval_centers = get_interval_center_points(y_range_min, y_range_max, number_of_y_bins)
+    
     for variable_name in variable_names:
         LOG.debug("Plotting %s." % variable_name)
         x_array = np.array(x_arrays[variable_name])
@@ -181,39 +227,21 @@ Example:
         fig = plt.figure()
         # plt.title(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
 
+        LOG.debug("Getting interval center points.")
+        t = datetime.datetime.now()
         x_offset, x_interval_centers = get_interval_center_points(np.min(x_array), np.max(x_array), number_of_x_bins)
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
         LOG.debug("Getting stats.")
+        t = datetime.datetime.now()
         averages, standard_deviations = get_x_stats(x_array, y_array, x_interval_centers, x_offset)
-
-        LOG.debug("Getting color array.")
-        LOG.debug("Counting...")
-        t = datetime.datetime.now()
-        bins_count = {}
-        x_len = len(x_array)
-        for i, x_ in enumerate(x_array):
-            if i % 100000 == 0:
-                print i, "/", x_len
-            x_i = get_bin_index(x_interval_centers, x_array[i])
-            y_i = get_bin_index(y_interval_centers, y_array[i])
-            increment_bins(bins_count, x_i, y_i)
         LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
-
-        LOG.debug("Creating colors...")
-        t = datetime.datetime.now()
-        colors = np.empty_like(x_array)
-        for i, c in enumerate(colors):
-            if i % 100000 == 0:
-                print i, "/", x_len
-            x_i = get_bin_index(x_interval_centers, x_array[i])
-            y_i = get_bin_index(y_interval_centers, y_array[i])
-            colors[i] = bins_count[x_i][y_i]
-        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
-            
-        LOG.debug("Getting colors. Counting.")
 
         # Getting x-axis ranges.
         x_range_min, x_range_max = get_axis_range(x_interval_centers)
+
+        scatter_y_extreme = max(abs((averages - standard_deviations).min()),
+                                abs((averages + standard_deviations).max()))
 
         # Define the image grid.
         gs = matplotlib.gridspec.GridSpec(3, 1, height_ratios=[1, 5, 1])
@@ -238,12 +266,10 @@ Example:
 
         ax.set_title( title )
 
-        # Average for all values.
-        average_all = np.average(y_array)
+        # Plot average for all values.
         plt.plot([x_range_min, x_range_max], [average_all, average_all], linewidth=0.1, color="black")
 
-        # Std for all values.
-        std_all = np.std(y_array)
+        # Plot std for all values.
         plt.plot([x_range_min, x_range_max], [std_all, std_all], linewidth=0.1, color="black")
 
         # The average for each x axis interval.
@@ -252,7 +278,7 @@ Example:
 
         # Set the range of the xaxis.
         ax.set_xlim(x_range_min, x_range_max)
-        ax.set_ylim(y_range_min/4, y_range_max/2)
+        ax.set_ylim(y_range_min, y_range_max)
 
         # 5% out to the left.
         ax.annotate('A: %0.2f' % (average_all), xy=(x_range_max, average_all), xycoords='data',
@@ -282,13 +308,19 @@ Example:
         #############################
         LOG.debug("Create scatter plot")
 
+        # Get the randomly pruned x_array.
+        x_array_pruned, y_array_pruned = randomly_prune(x_array, y_array, fraction_to_keep)
+
+        # Get the colors array
+        colors = get_color_array(x_array_pruned, y_array_pruned, x_interval_centers, y_interval_centers)
+
         # Set the image grid.
         ax = plt.subplot(gs[1])
         ax.grid(args["--grid"])
 
         # Do the scatter plot.
-        plt.scatter(x_array,
-                    y_array,
+        plt.scatter(x_array_pruned,
+                    y_array_pruned,
                     s=0.1,
                     c=colors,
                     marker=',',  # Pixel.
@@ -304,7 +336,7 @@ Example:
         # Text on the y-axis.
         plt.ylabel(r'$\mathtt{st_{pert} (K) - st_{true} (K)}$')
 
-        # Set the range of the xaxis.
+        # Set the range of axis.
         ax.set_xlim(x_range_min, x_range_max)
         ax.set_ylim(y_range_min, y_range_max)
 
