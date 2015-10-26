@@ -12,7 +12,6 @@ import os
 # Third party
 import numpy as np
 import netCDF4
-from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import pylab
 
@@ -57,15 +56,38 @@ def perturbate(output_queue, swath_input_id, *args, **kwargs):
     LOG.debug("%i done" % (swath_input_id))
 
 
-def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename,
-                        cloudmask_filename, number_of_perturbations,
-                        run_in_parallel = False
-                        ):
-    LOG.info("db_filename:          %s" % (database_filename))
-    LOG.info("avhrr_filename:       %s" % (avhrr_filename))
-    LOG.info("sunsatangle_filename: %s" % (sunsatangle_filename))
-    LOG.info("cloudmask_filename:   %s" % (cloudmask_filename))
+def get_sea_ice_fractions(data_directory, avhrr_filename):
+    """
+    Getting the sea ice fraction from a level 2 file.
+    """
+    if data_directory is None:
+        return None
 
+    # The id to identify the ice fraction file.
+    # noaa18_20080901_1157_99999_satproj_00000_12119_cloudtype.h5
+    satellite_id, date, time, _, _, _, orbit_id, _ = os.path.basename(avhrr_filename).split("_")
+    # Find the ice fraction nc file:
+    # 20080901115700-DMI_METNO-L2P_GHRSST-STskin-GAC_polar_SST_IST-noaa18_00000_12119-v02.0-fv01.0.nc
+    nc_filenames = glob.glob(os.path.join(data_directory, "*%s%s*%s*%s*" % (date, time, satellite_id, orbit_id)))
+    if len(nc_filenames) == 0:
+        return None
+
+    with contextlib.closing(netCDF4.Dataset(nc_filenames[0])) as nc:
+        return nc.variables["sea_ice_fraction"][0]
+
+
+def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filename,
+                        cloudmask_filename, sea_ice_fraction_data_directory,
+                        number_of_perturbations, run_in_parallel = False
+                        ):
+    """
+    Populate the database with perturbed values.
+    """
+    LOG.info("db_filename:                      %s" % (database_filename))
+    LOG.info("avhrr_filename:                   %s" % (avhrr_filename))
+    LOG.info("sunsatangle_filename:             %s" % (sunsatangle_filename))
+    LOG.info("cloudmask_filename:               %s" % (cloudmask_filename))
+    LOG.info("sea_ice_fraction_data_directory:  %s" % (sea_ice_fraction_data_directory))
 
     # Reading in the input file.
     # The file is cached, so that when the values are read, they are read
@@ -76,15 +98,19 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                                 cloudmask_filename) as avhrr_model:
         LOG.info(avhrr_model)
         assert(avhrr_model.lat.shape == avhrr_model.lon.shape)
-
+        
         # Get the sigma values based on the satellite id.
         sigmas = eustace.sigmas.get_sigmas(avhrr_model.satellite_id)
         LOG.info(sigmas)
 
+        sea_ice_fractions = get_sea_ice_fractions(sea_ice_fraction_data_directory, avhrr_filename)
+        if sea_ice_fractions is not None:
+            assert(avhrr_model.lat.shape == sea_ice_fractions.shape)
+
         # Some book keeping...
         total_perturbed_st_count = 0
         counter = 0
-
+        
         # Set the random seed, so that the results are the same
         # the next time the exact same system is is run.
         random.seed(1)
@@ -117,7 +143,12 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                 # Rows.
                 for row_index in np.arange(avhrr_model.lon.shape[0]):
                     # Some diagnostics while running.
-                    LOG.info("ROW: %i.   total st_count: %i.   total_time: %s.   sts./sec: %f" % (row_index, total_perturbed_st_count, str(datetime.datetime.now() - start_time), (total_perturbed_st_count / (datetime.datetime.now() - start_time).total_seconds())))
+                    LOG.info("ROW: %i.   total st_count: %i.   total_time: %s.   sts./sec: %f" %
+                             (row_index, total_perturbed_st_count,
+                              str(datetime.datetime.now() - start_time),
+                              (total_perturbed_st_count / (datetime.datetime.now() -
+                                                           start_time).total_seconds())))
+
                     # Cols.
                     for col_index in np.arange(avhrr_model.lon.shape[1]):
                         counter += 1
@@ -176,6 +207,15 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             # No need to do more for this pixel, if the output is not a number.
                             continue
 
+                        if sea_ice_fractions is not None:
+                            if sea_ice_fractions[row_index][col_index] is None or np.isnan(sea_ice_fractions[row_index][col_index]):
+                                sea_ice_fraction = None
+                            else:
+                                sea_ice_fraction = float(sea_ice_fractions[row_index][col_index])
+                        else:
+                            sea_ice_fraction = None
+
+
                         swath_input_id = db.insert_swath_values(
                             str(avhrr_model.satellite_id),
                             surface_temp=st_truth_K, # float(true_st_K),
@@ -186,7 +226,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             cloudmask=int(avhrr_model.cloudmask[row_index, col_index]),
                             swath_datetime=avhrr_model.swath_datetime,
                             lat=float(lat),
-                            lon=float(lon)
+                            lon=float(lon),
+                            sea_ice_fraction=sea_ice_fraction
                             )
 
 
@@ -258,13 +299,14 @@ Usage:
   {filename} --version
 
 Options:
-  -h --help                         Show this screen.
-  --version                         Show version.
-  -v --verbose                      Show some diagostics.
-  -d --debug                        Show some more diagostics.
-  --number-of-perturbations=<NoP>   The number of perturbations per pixel, [default: 10].
-  --result-directory=<directory>    Put the result (the database file) into this directory if set.
-  --perturbate-in-parallel          Running the perturbations in parallel.
+  -h --help                                Show this screen.
+  --version                                Show version.
+  -v --verbose                             Show some diagostics.
+  -d --debug                               Show some more diagostics.
+  --number-of-perturbations=<NoP>          The number of perturbations per pixel, [default: 10].
+  --result-directory=<directory>           Put the result (the database file) into this directory if set.
+  --perturbate-in-parallel                 Running the perturbations in parallel.
+  --sea-ice-fraction-data-directory=<dir>  The sea ice fraction data directory.
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')
     if args["--debug"]:
@@ -275,13 +317,19 @@ Options:
         logging.basicConfig(level=logging.WARNING)
     LOG.info(args)
 
-    # Make sure the result directory exists, if set.
+    # Make sure the directories exist, if set.
     if args["--result-directory"] is not None and \
             not os.path.isdir(args["--result-directory"]):
-        raise RuntimeError("The result directory must exist.")
+        raise RuntimeError("The result directory '%s' must exist." % args["--result-directory"])
 
-    # There are two options to populate the database, by <satellite-id>
-    # or by specifying the file names.
+    if args["--sea-ice-fraction-data-directory"] is not None and \
+            not os.path.isdir(args["--sea-ice-fraction-data-directory"]):
+        raise RuntimeError("The sea ice fraction data directory '%s' must exist." %\
+                               (args["--result-directory"]))
+
+    # There are two options to populate the database,
+    # 1. by <satellite-id> or
+    # 2. by specifying the file names.
     if args["<satellite-id>"] is not None:
         # Option 1: Populate by <satellite-id>.
         LOG.info(args["<satellite-id>"])
@@ -303,6 +351,7 @@ Options:
                                 avhrr_filename,
                                 sunsatangle_filename,
                                 cloudmask_filename,
+                                args["--sea-ice-fraction-data-directory"],
                                 int(args["--number-of-perturbations"]),
                                 args["--perturbate-in-parallel"]
                                 )
@@ -312,6 +361,7 @@ Options:
                             args["<avhrr-filename>"],
                             args["<sunsatangle-filename>"],
                             args["<cloudmask-filename>"],
+                            args["--sea-ice-fraction-data-directory"],
                             int(args["--number-of-perturbations"]),
                             args["--perturbate-in-parallel"])
 

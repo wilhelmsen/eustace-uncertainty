@@ -1,0 +1,3 @@
+The following commands has been used to create plots:
+
+for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do for ALGORITHM in SST_DAY SST_NIGHT SST_TWILIGHT IST MIZT_SST_IST_DAY MIZT_SST_IST_NIGHT MIZT_SST_IST_TWILIGHT; do SOURCE_DBFILE=/data/hw/eustace_databases/$SAT_ID.sqlite3; DB_FILE=/tmp/ramdisks/ramdisk/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && rsync -av $SOURCE_DBFILE $DB_FILE && python scatter_plot.py $DB_FILE s.surface_temp p.surface_temp "s.t_11 - s.t_12" p.epsilon_11 p.epsilon_12 p.epsilon_37 -d --y-min -0.6 --y-max 0.6 --lat-gt 50 --lat-lt -50 --output-dir /data/hw/eustace_plots --algorithm $ALGORITHM; done; rm $DB_FILE; done

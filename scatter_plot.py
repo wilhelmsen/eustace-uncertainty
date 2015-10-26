@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec
 import pylab
 import eustace.db
+import eustace.surface_temperature
 import numpy as np
 import logging
 import datetime
@@ -75,6 +76,8 @@ def randomly_prune(x_array, y_array, fraction_to_keep):
         y_array_pruned = []
         x_array_pruned = []
         for i in np.arange(y_array_length):
+            if np.isnan(x_array[i]):
+                continue
             if random.random() >= fraction_to_keep:
                 continue
             y_array_pruned.append(y_array[i])
@@ -116,16 +119,46 @@ def get_x_stats(x_array, y_array, x_interval_centers, offset):
 
 
 def get_interval_center_points(min_value, max_value, number_of_cells):
-    offset = (max_value - min_value)/float(number_of_cells)/2.0 
+    """
+    Creates a linspace and then converts it to its centerpoints.
+
+    That is...
+    Create a linspace which are the "edges" of the bin cells. One extra,
+    to cover the last cell.
+
+    |---|---|---|---|---|---|---|
+    '   '   '   '   '   '   '   '
+
+    Then the intervals are shifted to the right, to point to the center
+    points.
+    |---|---|---|---|---|---|---|
+      '   '   '   '   '   '   '   '
+
+    And then the last one is removed.
+
+    |---|---|---|---|---|---|---|
+      '   '   '   '   '   '   '
+
+    We now have <number_of_cells> center points.
+    """
     interval_centers = np.linspace(min_value, max_value, number_of_cells+1)
-    return offset, [i-offset for i in interval_centers[1:]]
+    offset = (max_value - min_value)/float(number_of_cells)/2.0 
+    return offset, [i+offset for i in interval_centers[:-1]]
+
+def get_marker_size(variable_name, x_offset):
+    # if variable_name.replace(" ", "").lower() == "s.sea_ice_fraction":
+    #    marker_size = x_offset/2.0
+    #else:
+    marker_size = 0.1
+    LOG.debug("Marker size set to %f." % (marker_size))
+    return marker_size
 
 
-def get_axis_range(interval, padding_pct=1):
+def get_axis_range(interval, offset, padding_pct=1):
     """
     Getting the axis range. Adding padding in % to both sides.
     """
-    axis_min, axis_max = np.min(interval), np.max(interval)
+    axis_min, axis_max = np.nanmin(interval)-offset, np.nanmax(interval)+offset
     # Add 1% extra to the axis range.
     padding = (axis_max - axis_min) * padding_pct / 100.0
     axis_min -= padding
@@ -148,7 +181,7 @@ Options:
   --version                  Show version.
   -v --verbose               Show some diagostics.
   -d --debug                 Show some more diagostics.
-  --dpi=dp                   The dpi of the output image, [default: 72].
+  --dpi=dp                   The dpi of the output image, [default: 300].
   --interval-bins=bins       Both the x-axis and the y-axis are divided into intervals that
                              creates a grid of cells. This is the number of small intervals
                              each of the axes will be divided into. [default: 200].
@@ -159,6 +192,8 @@ Options:
   --output-dir=<output-dir>  Output directory.
   --lat-lt=<lat>             Include lats less than.
   --lat-gt=<lat>             Include lats greater than.
+  --t11-t12-limit=<limit>    Only include values where t_11 - t12 is less than this value.
+  --algorithm=<algo>         Only include values calculated with the given algorithm.
 
 Example:
   python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
@@ -177,7 +212,6 @@ Example:
 
     variable_names = args["<variables>"]
     limit = None if args["--limit"] is None else int(args["--limit"])
-    number_of_x_bins = int(args["--interval-bins"])
     number_of_y_bins = int(args["--interval-bins"])
     y_array = []
 
@@ -185,13 +219,27 @@ Example:
     for variable in variable_names:
         x_arrays[variable]=[]
 
+    # Where...
+    # or
     where_sql_or = []
     if args["--lat-lt"] is not None:
         where_sql_or.append("s.lat < %s" % (args["--lat-lt"]))
     if args["--lat-gt"] is not None:
         where_sql_or.append("s.lat > %s" % (args["--lat-gt"]))
     where_sql = " OR ".join(where_sql_or)
-        
+    if len(where_sql_or) > 0:
+        where_sql = "(%s)" % (where_sql)
+
+    # and
+    where_sql_and = [where_sql,] if len(where_sql) > 0 else []
+    if args["--t11-t12-limit"] is not None:
+        where_sql_and.append("ABS(s.t_11 - s.t_12) < %s" % (args["--t11-t12-limit"]))
+        where_sql_and.append("ABS(s.t_11 + p.epsilon_11 - s.t_12 + p.epsilon_12) < %s" % (args["--t11-t12-limit"]))
+    if args["--algorithm"] is not None:
+        where_sql_and.append("p.algorithm IS '%s'" % (args["--algorithm"]))
+    where_sql = " AND ".join(where_sql_and)
+
+
     random.seed(1)
 
     LOG.debug("Get the values from the database.")
@@ -199,7 +247,6 @@ Example:
     with eustace.db.Db(args["<database-filename>"]) as db:
         for row in db.get_perturbed_values(variable_names, where_sql=where_sql, limit=limit):
             y_array.append(row[0])
-            
             for i in range(len(variable_names)):
                 if row[i + 1] == None:
                     x_arrays[variable_names[i]].append(np.NaN)
@@ -210,42 +257,77 @@ Example:
     LOG.info("%i samples" %(len(y_array)))
     y_array = np.array(y_array)
 
-    average_all = np.average(y_array)
-    std_all = np.std(y_array)
+    y_array_is_not_nan = y_array[~np.isnan(y_array)]
+    average_all = np.average(y_array_is_not_nan)
+    std_all = np.std(y_array_is_not_nan)
     y_array_length = len(y_array)
-    number_of_points_in_plot = 1e5
-    fraction_to_keep = min(number_of_points_in_plot/float(y_array_length), 1)
-    y_range_min, y_range_max = int(args["--y-min"]), int(args["--y-max"])
+    number_of_points_wished_in_plot = 5e5
+    y_range_min, y_range_max = float(args["--y-min"]), float(args["--y-max"])
     y_offset, y_interval_centers = get_interval_center_points(y_range_min, y_range_max, number_of_y_bins)
+    minimum_number_of_values_to_plot = 100
     
     for variable_name in variable_names:
+        LOG.debug("#" * 30)
         LOG.debug("Plotting %s." % variable_name)
-        x_array = np.array(x_arrays[variable_name])
+        LOG.debug("#" * 30)
 
+        # Make sure the array is a numpy array.
+        x_array = np.array(x_arrays[variable_name])
+        
+        LOG.debug("Remove the nans from the x_array and sort what is left.")
+        t = datetime.datetime.now()  # Diagnostics.
+        x_array_without_nans_sorted = np.sort(x_array[~np.isnan(x_array)])
+        LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
+        LOG.info("%i values when NaN is removed." % (x_array_without_nans_sorted.size))
+
+        if x_array_without_nans_sorted.size < minimum_number_of_values_to_plot:
+            LOG.info("Not enough valid values for '%s'. Moving on to the next plot." % (variable_name))
+            continue
+
+        # Set up the plot. Clearing it, ranges and so.
         LOG.debug("Clearing plt")
         plt.clf()
         fig = plt.figure()
-        # plt.title(r"$\mathtt{%s}$" % variable_name.replace("_", "\_"))
 
+        # Center points.
+        # This is used to create the colors in the scatter plot.
+        # The axis ranges (the visual area) of the scatter plot is divided
+        # into bins. Each bin is defined by its center point.
+        # The x_array is then connected to every the closest center point. This last
+        # detail also means that if a point in the x_array is outside the visual area,
+        # the closest bin is on the edge.
+        # The y_bins are the same for all x_variables, which is why only the
+        # x_intervals_centers are set here.
         LOG.debug("Getting interval center points.")
-        t = datetime.datetime.now()
-        x_offset, x_interval_centers = get_interval_center_points(np.min(x_array), np.max(x_array), number_of_x_bins)
+        t = datetime.datetime.now()  # Diagnostics.
+
+        # Set the x-axis intervals.
+        if variable_name.replace(" ", "").lower() == "s.t_11-s.t_12":
+            x_min, x_max = -0.5, 3.0
+        else:
+            x_min, x_max = x_array_without_nans_sorted[0], x_array_without_nans_sorted[-1]
+        
+        number_of_x_bins = int(args["--interval-bins"])
+        if variable_name.replace(" ", "").lower() == "s.sea_ice_fraction":
+            number_of_x_bins = 20
+
+        x_offset, x_interval_centers = get_interval_center_points(x_min, x_max,
+                                                                  number_of_x_bins)
         LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
+        # Getting the statistics for each column. This is used to plot the line
+        # in the uppermost plot that shows how the statistcs change over time.
         LOG.debug("Getting stats.")
-        t = datetime.datetime.now()
-        averages, standard_deviations = get_x_stats(x_array, y_array, x_interval_centers, x_offset)
+        t = datetime.datetime.now()  # Diagnostics.
+        averages, standard_deviations = get_x_stats(x_array, y_array,
+                                                    x_interval_centers, x_offset)
         LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
-        # Getting x-axis ranges.
-        x_range_min, x_range_max = get_axis_range(x_interval_centers)
+        # Getting x-axis ranges. It just adds a little on the edges.
+        x_range_min, x_range_max = get_axis_range(x_interval_centers, x_offset)
 
-        scatter_y_extreme = max(abs((averages - standard_deviations).min()),
-                                abs((averages + standard_deviations).max()))
-
-        # Define the image grid.
+        # The plot uses a gridspec. 3 rows. 1 col.
         gs = matplotlib.gridspec.GridSpec(3, 1, height_ratios=[1, 5, 1])
-
 
         ###################################
         #  Average and standard deviation #
@@ -253,16 +335,26 @@ Example:
         LOG.debug("Create the statistics plot / top bar.")
         
         # Set the image grid.
-        ax = plt.subplot(gs[0])
+        ax = plt.subplot(gs[0])  # The first column.
         ax.grid(args["--grid"])  # Grid in the plot or not.
 
         # Set the title.
-        title = os.path.basename(args["<database-filename>"]).replace(".sqlite3", "").replace("db", "")
-        title += ":\ %s" % variable_name.replace("_", "\_")
+        title = os.path.basename(args["<database-filename>"]).replace(".sqlite3", "").replace("db", "").replace("_", "\_")
+        title += " (%s)" % args["--algorithm"] if args["--algorithm"] is not None else ""
+        title += ": %s" % variable_name
         title = r"$\mathtt{%s}$" % title
-
         if where_sql is not None and where_sql.strip() != "":
-            title += "\n" + r"$\mathtt{%s}$" % ( where_sql.replace(" ", "\ ") )
+            title += "\n"
+            title += r"$ \mathtt{ %s} $" % (where_sql) 
+
+        title = title.replace("_", "\_")
+
+        for index in [11, 12, 37]:
+            title = title.replace("t\_%i" % (index), "t_{%i}" % (index))
+            title = title.replace("epsilon\_%i" % (index), "\epsilon_{%i}" % (index))
+
+        LOG.debug("Title:")
+        LOG.debug(title)
 
         ax.set_title( title )
 
@@ -278,7 +370,7 @@ Example:
 
         # Set the range of the xaxis.
         ax.set_xlim(x_range_min, x_range_max)
-        ax.set_ylim(y_range_min, y_range_max)
+        ax.set_ylim(y_range_min/4.0, y_range_max/2.0)
 
         # 5% out to the left.
         ax.annotate('A: %0.2f' % (average_all), xy=(x_range_max, average_all), xycoords='data',
@@ -308,6 +400,9 @@ Example:
         #############################
         LOG.debug("Create scatter plot")
 
+        # Determine the fraction of the array to put in the plot.
+        fraction_to_keep = min(number_of_points_wished_in_plot / float(x_array_without_nans_sorted.size), 1)
+
         # Get the randomly pruned x_array.
         x_array_pruned, y_array_pruned = randomly_prune(x_array, y_array, fraction_to_keep)
 
@@ -318,10 +413,13 @@ Example:
         ax = plt.subplot(gs[1])
         ax.grid(args["--grid"])
 
+        # Set the scatter plot marker size.
+        marker_size = get_marker_size(variable_name, x_offset)
+
         # Do the scatter plot.
         plt.scatter(x_array_pruned,
                     y_array_pruned,
-                    s=0.1,
+                    s=marker_size,
                     c=colors,
                     marker=',',  # Pixel.
                     edgecolors='none'  # No pixel edges.
@@ -352,7 +450,7 @@ Example:
         plt.ylabel(r"$\mathtt{N_{samples}}$")
 
         # Do the plot.
-        n, bins, patches = plt.hist(x_array, number_of_x_bins)
+        n, bins, patches = plt.hist(x_array_without_nans_sorted, number_of_x_bins)
 
         # Set the range of the xaxis.
         ax.set_xlim(x_range_min, x_range_max)
@@ -361,10 +459,19 @@ Example:
         for label in ax.xaxis.get_ticklabels():
             label.set_visible(False)
 
-        # Hide the yaxis labels.
+        # Hide every second yaxis labels.
         for label in ax.yaxis.get_ticklabels()[::2]:
             label.set_visible(False)
 
+        # Printing the number of samples...
+        ax.annotate(r'$\mathtt{N_{total}}:$',
+                    xy=(1.05, 0.6),
+                    xycoords='axes fraction',
+                    annotation_clip=False)
+        ax.annotate(r'$\mathtt{%s}$' % ("{:,}".format(x_array_without_nans_sorted.size)),
+                    xy=(1.05, 0.2),
+                    xycoords='axes fraction',
+                    annotation_clip=False)
 
         ###################
         # Saving the plot #
@@ -374,8 +481,10 @@ Example:
         fig.subplots_adjust(right=0.75)
 
         # Create a filename.
-        filename = "%s_%s.png" % (os.path.basename(args["<database-filename>"]),
-                                  variable_name)
+        filename = "%s" % (os.path.basename(args["<database-filename>"]).replace(".sqlite3", ""))
+        filename += "_%s" % args["--algorithm"] if args["--algorithm"] is not None else ""
+        filename += "_%s" % variable_name
+        filename += ".png"
         # Replacing all spaces with underscores.
         filename = filename.replace(" ", "_")
 
