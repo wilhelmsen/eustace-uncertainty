@@ -219,33 +219,23 @@ Example:
     for variable in variable_names:
         x_arrays[variable]=[]
 
-    # Where...
-    # or
-    where_sql_or = []
-    if args["--lat-lt"] is not None:
-        where_sql_or.append("s.lat < %s" % (args["--lat-lt"]))
-    if args["--lat-gt"] is not None:
-        where_sql_or.append("s.lat > %s" % (args["--lat-gt"]))
-    where_sql = " OR ".join(where_sql_or)
-    if len(where_sql_or) > 0:
-        where_sql = "(%s)" % (where_sql)
-
-    # and
-    where_sql_and = [where_sql,] if len(where_sql) > 0 else []
-    if args["--t11-t12-limit"] is not None:
-        where_sql_and.append("ABS(s.t_11 - s.t_12) < %s" % (args["--t11-t12-limit"]))
-        where_sql_and.append("ABS(s.t_11 + p.epsilon_11 - s.t_12 + p.epsilon_12) < %s" % (args["--t11-t12-limit"]))
-    if args["--algorithm"] is not None:
-        where_sql_and.append("p.algorithm IS '%s'" % (args["--algorithm"]))
-    where_sql = " AND ".join(where_sql_and)
-
-
     random.seed(1)
 
     LOG.debug("Get the values from the database.")
     t = datetime.datetime.now()
     with eustace.db.Db(args["<database-filename>"]) as db:
-        for row in db.get_perturbed_values(variable_names, where_sql=where_sql, limit=limit):
+        # Where sql used for the title in the plots.
+        where_sql = db.build_where_sql(lat_less_than=args["--lat-lt"]
+                                       lat_greater_than=args["--lat-gt"],
+                                       tb_11_minus_tb_12_limit=args["--t11-t12-limit"],
+                                       algorithm=args["--algorithm"])
+        # Get the values.
+        for row in db.get_perturbed_values(variable_names,
+                                           lat_less_than=args["--lat-lt"],
+                                           lat_greater_than=args["--lat-gt"],
+                                           tb_11_minus_tb_12_limit=args["--t11-t12-limit"],
+                                           algorithm=args["--algorithm"],
+                                           limit=limit):
             y_array.append(row[0])
             for i in range(len(variable_names)):
                 if row[i + 1] == None:
@@ -345,7 +335,7 @@ Example:
         title = r"$\mathtt{%s}$" % title
         if where_sql is not None and where_sql.strip() != "":
             title += "\n"
-            title += r"$ \mathtt{ %s} $" % (where_sql) 
+            title += r"$ \mathtt{ %s} $" % (where_sql)
 
         title = title.replace("_", "\_")
 

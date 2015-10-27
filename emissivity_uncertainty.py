@@ -104,7 +104,7 @@ if __name__ == "__main__":
 File: {filename}
 
 Usage:
-  {filename} <satellite_id> <sun_zenith_angle> <emissivity_sat_zen_00_filename> <emissivity_sat_zen_30_filename> <emissivity_sat_zen_60_filename> [-d|-v] [options]
+  {filename} <satellite_id> <sun_zenith_angle> <emissivity_sat_zen_00_filename> <emissivity_sat_zen_15_filename> <emissivity_sat_zen_30_filename> <emissivity_sat_zen_45_filename> <emissivity_sat_zen_60_filename> [-d|-v] [options]
   {filename} (-h | --help)
   {filename} --version
 
@@ -126,8 +126,8 @@ Options:
     LOG.info(args)
 
     values_from_file = {}
-    sat_zenith_angles = [0, 30, 60]
-    colors = {0: "r", 30: "g", 60: "b"}
+    sat_zenith_angles = [0, 15, 30, 45, 60]
+    colors = {0: "r", 15: "g", 30: "b", 45: "m", 60: "c"}
     for sat_zenith_angle in sat_zenith_angles:
         values_from_file["sat_zen_%02i" % (sat_zenith_angle)] = load_values_from_file(args["<emissivity_sat_zen_%02i_filename>" % (sat_zenith_angle)])
     
@@ -247,4 +247,5 @@ Options:
 
         LOG.debug("Saving plot to %s" %(filename))
         plt.savefig(filename, dpi=int(args['--dpi']))
+        LOG.info("Plot saved to %s" %(filename))
         

@@ -138,6 +138,8 @@ class Db:
         self.conn.commit()
         return counter
 
+
+
     """
     def get_perturbed_statistics(self, variable, where=None):
         result = {}
@@ -148,21 +150,81 @@ class Db:
             result[row[0]] = [row[1], row[2]]
         return result
        """
+
+
+    def build_where_sql(self, lat_less_than=None, lat_greater_than=None,
+                        st_less_than=None, st_greater_than=None,
+                        tb_11_minus_tb_12_limit=None, algorithm=None):
+        # TODO: Move this to db.py
+        #
+        # Where...
+        # or...
+        where_sql_or = []
+        if lat_less_than is not None:
+            where_sql_or.append("s.lat < %s" % (lat_less_than))
+        if lat_greater_than is not None:
+            where_sql_or.append("s.lat > %s" % (lat_greater_than))
+        where_sql = " OR ".join(where_sql_or)
+        if len(where_sql_or) > 0:
+            where_sql = "(%s)" % (where_sql)
+
+        # and...
+        where_sql_and = [where_sql,] if len(where_sql) > 0 else []
+        if tb_11_minus_tb_12_limit is not None:
+            where_sql_and.append("ABS(s.t_11 - s.t_12) < %s" % (tb_11_minus_tb_12_limit))
+            where_sql_and.append("ABS(s.t_11 + p.epsilon_11 - s.t_12 + p.epsilon_12) < %s" % (tb_11_minus_tb_12_limit))
+
+        if algorithm is not None:
+            where_sql_and.append("p.algorithm IS '%s'" % (algorithm))
+
+        if st_less_than is not None:
+            where_sql_and.append("p.surface_temp <= %i" % (st_less_than))
+
+        if st_greater_than is not None:
+            where_sql_and.append("p.surface_temp > %i" % (st_greater_than))
+
+        # Join it all.
+        where_sql = " AND ".join(where_sql_and)
+        return where_sql
+
  
-    def get_perturbed_values(self, swath_variables, where_sql=None, limit=None):
-        sql = "SELECT p.surface_temp - s.surface_temp, {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id".format(swath_variables_string=", ".join(swath_variables))
+    def get_perturbed_values(self, swath_variables=None, lat_less_than=None,
+                             lat_greater_than=None, tb_11_minus_tb_12_limit=None,
+                             st_less_than=None, st_greater_than=None,
+                             algorithm=None, limit=None):
+        """
+        Gets the (perturbed) values from the database.
+        """
+        # The values to get from the database.
+        swath_variables_string = ", %s" % (", ".join(swath_variables)) if swath_variables is not None else ""
+
+        # Build the sql.
+        sql = "SELECT p.surface_temp - s.surface_temp {swath_variables_string} FROM swath_inputs AS s JOIN perturbations AS p ON p.swath_input_id = s.id".format(swath_variables_string = swath_variables_string)
+
+        # Build the where sql.
+        where_sql = self.build_where_sql(lat_less_than=lat_less_than,
+                                         lat_greater_than=lat_greater_than,
+                                         tb_11_minus_tb_12_limit=tb_11_minus_tb_12_limit,
+                                         st_less_than=st_less_than,
+                                         st_greater_than=st_greater_than,
+                                         algorithm=algorithm)
+
+        # Add the where string.
         if where_sql is not None and where_sql.strip() != "":
             sql += " WHERE %s" %(where_sql)
 
+        # Add the limit.
         if limit is not None:
             sql += " LIMIT %i" % (limit)
 
+        # Log the full sql string.
         LOG.debug(sql)
+
+        # Get the results.
         for row in self.get_rows(sql):
             yield row
-            
-        
-        
+
+
 if __name__ == "__main__":
     with Db("/tmp/fisk.db") as db:
         for sql in sql_list:
