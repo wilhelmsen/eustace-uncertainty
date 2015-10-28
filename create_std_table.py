@@ -71,7 +71,7 @@ Options:
 
     with open(output_filename, "a") as fp:
         fp.write("# %s\n" % (satellite_id))
-        fp.write("# algo avg std\n")
+        fp.write("# algo avg std N\n")
     
     with eustace.db.Db(args["<database-filename>"]) as db:
         for algorithm in algorithms:
