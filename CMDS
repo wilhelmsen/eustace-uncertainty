@@ -13,3 +13,4 @@ for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do SOURCE_DBFIL
 
 
 python merge_std_table.py /data/hw/eustace_stats algorithm_sat_std.stat -f -v
+python emissivity_uncertainty.py metop02 50 data/emissivity/gs_dens_e345_Tb345_ia00.txt data/emissivity/gs_dens_e345_Tb345_ia15.txt data/emissivity/gs_dens_e345_Tb345_ia30.txt data/emissivity/gs_dens_e345_Tb345_ia45.txt data/emissivity/gs_dens_e345_Tb345_ia60.txt -v

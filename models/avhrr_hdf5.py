@@ -77,7 +77,7 @@ class Hdf5(BaseModel):
         return self.cache[key]
 
     @property
-    def sun_zenit_angle(self):
+    def sun_zenith_angle(self):
         """
         image1, SUNZ
         # return self._get_sun_sat_angle_value("image1", "SUNZ")
@@ -85,7 +85,7 @@ class Hdf5(BaseModel):
         return self._get_sun_sat_data("image1")
 
     @property
-    def sat_zenit_angle(self):
+    def sat_zenith_angle(self):
         """
         image2, SATZ
         return self._get_sun_sat_angle_value("image2", "SATZ")
@@ -192,8 +192,8 @@ Options:
         print model.ch3a
         print model.ch1
         print model.ch2
-        print model.sun_zenit_angle
-        print model.sat_zenit_angle
+        print model.sun_zenith_angle
+        print model.sat_zenith_angle
         print model.cloudmask
         print model.lat
         print model.lon

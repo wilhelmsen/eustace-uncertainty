@@ -28,7 +28,7 @@ def perturbate_in_parallel(output_queue, swath_input_id,
                            t11_K, t12_K,
                            t37_K, t_clim_K,
                            sigma_11, sigma_12, sigma_37,
-                           sun_zenit_angle, sat_zenit_angle,
+                           sun_zenith_angle, sat_zenith_angle,
                            random_seed=None):
     """
     Running the perturbations in parallel. This only seems to make
@@ -40,7 +40,7 @@ def perturbate_in_parallel(output_queue, swath_input_id,
                          t11_K, t12_K,
                          t37_K, t_clim_K,
                          sigma_11, sigma_12, sigma_37,
-                         sun_zenit_angle, sat_zenit_angle),
+                         sun_zenith_angle, sat_zenith_angle),
                    kwargs={"random_seed": random_seed})
     p.start()
     LOG.debug("%i started." % (swath_input_id))
@@ -175,8 +175,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             raise RuntimeException("Missing T11 or T12")
 
                         # Angles.
-                        sun_zenit_angle = float(avhrr_model.sun_zenit_angle[row_index, col_index])
-                        sat_zenit_angle = float(avhrr_model.sat_zenit_angle[row_index, col_index])
+                        sun_zenith_angle = float(avhrr_model.sun_zenith_angle[row_index, col_index])
+                        sat_zenith_angle = float(avhrr_model.sat_zenith_angle[row_index, col_index])
 
                         # Missing climatology. Using t11_K in stead.
                         t_clim_K = t11_K
@@ -189,7 +189,7 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
 
                         # Pick algorithm.
                         algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
-                            sun_zenit_angle,
+                            sun_zenith_angle,
                             t11_K,
                             t37_K)
 
@@ -200,8 +200,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                                                                                          t12_K,
                                                                                          t37_K,
                                                                                          t_clim_K,
-                                                                                         sun_zenit_angle,
-                                                                                         sat_zenit_angle)
+                                                                                         sun_zenith_angle,
+                                                                                         sat_zenith_angle)
 
                         if np.isnan(st_truth_K):
                             # No need to do more for this pixel, if the output is not a number.
@@ -221,8 +221,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                             surface_temp=st_truth_K, # float(true_st_K),
                             t_11=float(t11_K),
                             t_12=float(t12_K),
-                            sat_zenit_angle=sat_zenit_angle,
-                            sun_zenit_angle=sun_zenit_angle,
+                            sat_zenith_angle=sat_zenith_angle,
+                            sun_zenith_angle=sun_zenith_angle,
                             cloudmask=int(avhrr_model.cloudmask[row_index, col_index]),
                             swath_datetime=avhrr_model.swath_datetime,
                             lat=float(lat),
@@ -244,8 +244,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                                                                                                     sigmas["sigma_11"],
                                                                                                     sigmas["sigma_12"],
                                                                                                     sigmas["sigma_37"],
-                                                                                                    sun_zenit_angle,
-                                                                                                    sat_zenit_angle,
+                                                                                                    sun_zenith_angle,
+                                                                                                    sat_zenith_angle,
                                                                                                     random_seed=counter)
                             num_inserted = db.insert_many_perturbations(swath_input_id, perturbations)
                             total_perturbed_st_count += num_inserted
@@ -264,8 +264,8 @@ def populate_from_files(database_filename, avhrr_filename, sun_sat_angle_filenam
                                                    sigmas["sigma_11"],
                                                    sigmas["sigma_12"],
                                                    sigmas["sigma_37"],
-                                                   sun_zenit_angle,
-                                                   sat_zenit_angle,
+                                                   sun_zenith_angle,
+                                                   sat_zenith_angle,
                                                    random_seed=counter)
                             number_of_processes_started += 1
 

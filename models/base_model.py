@@ -8,11 +8,11 @@ class BaseModel(object):
         raise NotImplementedError
 
     @abstractproperty
-    def sun_zenit_angle(self):
+    def sun_zenith_angle(self):
         raise NotImplementedError
 
     @abstractproperty
-    def sat_zenit_angle(self):
+    def sat_zenith_angle(self):
         raise NotImplementedError
 
     @abstractproperty

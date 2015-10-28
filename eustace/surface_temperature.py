@@ -28,10 +28,10 @@ class ST_ALGORITHM:
     MIZT_SST_IST_TWILIGHT = "MIZT_SST_IST_TWILIGHT"
 
 
-def sat_teta(sat_zenit_angle):
+def sat_teta(sat_zenith_angle):
     """
     """
-    return 1.0 / np.cos(np.radians(sat_zenit_angle)) - 1.0
+    return 1.0 / np.cos(np.radians(sat_zenith_angle)) - 1.0
 
 
 def sanity_check_surface_temperature(t_surface, t11, t12):
@@ -68,28 +68,28 @@ def sanity_check_surface_temperature(t_surface, t11, t12):
     return t_surface
 
 
-def _get_day_state(sun_zenit_angle, t37):
+def _get_day_state(sun_zenith_angle, t37):
     """
     Picks the state of the day, based on the angle.
 
     Outputs:
     Days, twilight, night.
     """
-    if sun_zenit_angle <= 90 or t37 is None or np.isnan(t37):
+    if sun_zenith_angle <= 90 or t37 is None or np.isnan(t37):
         return DAY_STATE.DAY
     else:
-        if sun_zenit_angle < 110:
+        if sun_zenith_angle < 110:
             return DAY_STATE.TWILIGHT
         else:
             return DAY_STATE.NIGHT
 
 
-def select_surface_temperature_algorithm(sun_zenit_angle, t11, t37):
+def select_surface_temperature_algorithm(sun_zenith_angle, t11, t37):
     """
     Selects which algorithm to use for different conditions.
     """
     # Gets the state of the day. Possible outputs are day, night, twilight.
-    day_state = _get_day_state(sun_zenit_angle, t37)
+    day_state = _get_day_state(sun_zenith_angle, t37)
 
     if t11 >= 268.95 and t11 < 270.95:
         # MIZT - Transition zone between water and ice weighted mean SST-IST,
@@ -118,7 +118,7 @@ def select_surface_temperature_algorithm(sun_zenit_angle, t11, t37):
 
 
 def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim,
-                            sun_zenit_angle, sat_zenit_angle):
+                            sun_zenith_angle, sat_zenith_angle):
     """
     Get the surface temperature for a specific algorithm.
 
@@ -133,7 +133,7 @@ def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim,
      IST |                 IST                   |
          +---------------------------------------+
     """
-    s_teta = sat_teta(sat_zenit_angle)
+    s_teta = sat_teta(sat_zenith_angle)
     st = None
 
     if st_algorithm == ST_ALGORITHM.SST_DAY:
@@ -144,7 +144,7 @@ def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim,
 
     elif st_algorithm == ST_ALGORITHM.SST_TWILIGHT:
         st = sea_surface_temperature_twilight(coeff, t11, t12, t37, t_clim,
-                                                s_teta, sun_zenit_angle)
+                                                s_teta, sun_zenith_angle)
 
     elif st_algorithm == ST_ALGORITHM.IST:
         st = ice_surface_temperature(coeff, t11, t12, s_teta)
@@ -160,7 +160,7 @@ def get_surface_temperature(st_algorithm, coeff, t11, t12, t37, t_clim,
     elif st_algorithm == ST_ALGORITHM.MIZT_SST_IST_TWILIGHT:
         st = marginal_ice_zone_temperature_twilight(coeff, t11, t12, t37,
                                                       t_clim, s_teta,
-                                                      sun_zenit_angle)
+                                                      sun_zenith_angle)
     else:
         raise SstException("Unknown sst algorithm, '%s'." % (str(st_algorithm)))
 
@@ -205,10 +205,10 @@ def marginal_ice_zone_temperature(coeff, t11, t12, sst, s_teta):
 
 
 def marginal_ice_zone_temperature_twilight(coeff, t11, t12, t37, t_clim, s_teta,
-                                           sun_zenit_angle):
+                                           sun_zenith_angle):
     mizt_day   = marginal_ice_zone_temperature_day(coeff, t11, t12, t_clim, s_teta)
     mizt_night = marginal_ice_zone_temperature_night(coeff, t11, t12, t37, s_teta)
-    return surface_temperature_twilight(mizt_day, mizt_night, sun_zenit_angle)
+    return surface_temperature_twilight(mizt_day, mizt_night, sun_zenith_angle)
 
 
 def sea_surface_temperature_day(coeff, t11, t12, t_clim, s_teta):
@@ -245,26 +245,26 @@ def sea_surface_temperature_night(coeff, t11, t12, t37, s_teta):
 
 
 def sea_surface_temperature_twilight(coeff, t11, t12, t37, t_clim, s_teta,
-                                     sun_zenit_angle):
+                                     sun_zenith_angle):
     """
     Sea Surface Temperature twilight algorithm:
     sstday and sstnight scaled linearly between - relative to sunzen-angle.
     """
     sst_night = sea_surface_temperature_night(coeff, t11, t12, t37, s_teta)
     sst_day = sea_surface_temperature_day(coeff, t11, t12, t_clim, s_teta)
-    return surface_temperature_twilight(sst_day, sst_night, sun_zenit_angle)
+    return surface_temperature_twilight(sst_day, sst_night, sun_zenith_angle)
 
 
-def surface_temperature_twilight(st_day, st_night, sun_zenit_angle):
+def surface_temperature_twilight(st_day, st_night, sun_zenith_angle):
     return (
-        ((sun_zenit_angle - 110) * (-0.05) * st_day)
-        + ((sun_zenit_angle - 90) * (0.05) * st_night)
+        ((sun_zenith_angle - 110) * (-0.05) * st_day)
+        + ((sun_zenith_angle - 90) * (0.05) * st_night)
         )
 
 
 def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K,
                                 t12_K, t37_K, t_clim_K, sigma_11, sigma_12,
-                                sigma_37, sun_zenit_angle, sat_zenit_angle,
+                                sigma_37, sun_zenith_angle, sat_zenith_angle,
                                 random_seed=None):
     """
     Getting n number of perturbed temperatures.
@@ -284,7 +284,7 @@ def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K,
     
         # Pick algorithm for the perturbed value.
         algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
-            sun_zenit_angle,
+            sun_zenith_angle,
             perturbed_t11_K,
             perturbed_t37_K)
 
@@ -295,8 +295,8 @@ def get_n_perturbed_temeratures(coeff, number_of_perturbations, t11_K,
                                                                    perturbed_t12_K,
                                                                    perturbed_t37_K,
                                                                    t_clim_K,
-                                                                   sun_zenit_angle,
-                                                                   sat_zenit_angle)
+                                                                   sun_zenith_angle,
+                                                                   sat_zenith_angle)
         # Append the result to the list of permutations.
         perturbations.append((algorithm,
                               perturbed_t11_K-t11_K, # epsilon_11,
@@ -319,38 +319,38 @@ if __name__ == "__main__":
     t12 = 261
     t37 = 261
     t_clim = 261
-    sat_zenit_angle = 20
-    sun_zenit_angle = 20
+    sat_zenith_angle = 20
+    sun_zenith_angle = 20
 
     t11 = 261
     t37 = None
-    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37)
+    assert(select_surface_temperature_algorithm(sun_zenith_angle, t11, t37)
            == ST_ALGORITHM.IST)
 
     t11 = 271
     t37 = None
-    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37)
+    assert(select_surface_temperature_algorithm(sun_zenith_angle, t11, t37)
            == ST_ALGORITHM.SST_DAY)
 
     t11 = 269
     t37 = np.NaN
-    assert(select_surface_temperature_algorithm(sun_zenit_angle, t11, t37)
+    assert(select_surface_temperature_algorithm(sun_zenith_angle, t11, t37)
            == ST_ALGORITHM.MIZT_SST_IST_DAY)
 
     t11 = t12
     t37 = t12
     with eustace.coefficients.Coefficients(satellite_id) as coeff:
         print get_surface_temperature(ST_ALGORITHM.IST, coeff, t11, t12, t37,
-                                      t_clim, sun_zenit_angle, sat_zenit_angle)
+                                      t_clim, sun_zenith_angle, sat_zenith_angle)
         print get_surface_temperature(ST_ALGORITHM.SST_DAY, coeff, t11, t12,
-                                      t37, t_clim, sun_zenit_angle,
-                                      sat_zenit_angle)
+                                      t37, t_clim, sun_zenith_angle,
+                                      sat_zenith_angle)
         print get_surface_temperature(ST_ALGORITHM.MIZT_SST_IST_DAY, coeff,
-                                      t11, t12, t37, t_clim, sun_zenit_angle,
-                                      sat_zenit_angle)
+                                      t11, t12, t37, t_clim, sun_zenith_angle,
+                                      sat_zenith_angle)
         print get_surface_temperature(ST_ALGORITHM.SST_NIGHT, coeff, t11, t12,
-                                      t37, t_clim, sun_zenit_angle,
-                                      sat_zenit_angle)
+                                      t37, t_clim, sun_zenith_angle,
+                                      sat_zenith_angle)
         print get_surface_temperature(ST_ALGORITHM.MIZT_SST_IST_NIGHT, coeff,
-                                      t11, t12, t37, t_clim, sun_zenit_angle,
-                                      sat_zenit_angle)
+                                      t11, t12, t37, t_clim, sun_zenith_angle,
+                                      sat_zenith_angle)

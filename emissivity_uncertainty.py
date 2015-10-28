@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
@@ -39,17 +40,17 @@ def calc_stats(values):
 
     That is, for now:
 
-    sat zenit angle 0:
+    sat zenith angle 0:
       avg(tb_11_K), std(tb_11_K)
       avg(tb_12_K), std(tb_12_K)
       avg(tb_37_K), std(tb_37_K)
 
-    sat zenit angle 30:
+    sat zenith angle 30:
       avg(tb_11_K), std(tb_11_K)
       avg(tb_12_K), std(tb_12_K)
       avg(tb_37_K), std(tb_37_K)
 
-    sat zenit angle 60:
+    sat zenith angle 60:
       avg(tb_11_K), std(tb_11_K)
       avg(tb_12_K), std(tb_12_K)
       avg(tb_37_K), std(tb_37_K)
@@ -76,137 +77,44 @@ def get_temperatures(satellite_id, sun_zenith_angle, sat_zenith_angle, values):
     """
     with eustace.coefficients.Coefficients(satellite_id) as coeff:
         for i in range(len(values["tb_11_K"])):
-            # Pick algorithm.
             tb_11_K = values["tb_11_K"][i]
+            tb_12_K = values["tb_12_K"][i]
             tb_37_K = values["tb_37_K"][i]
+            t_clim_K = tb_11_K
+
+            # Pick algorithm.
             algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
                 sun_zenith_angle,
                 tb_11_K,
                 tb_37_K)
 
-            t_clim_K = tb_11_K
             # Calculate the temperature.
-            st_truth_K = eustace.surface_temperature.get_surface_temperature(algorithm,
+            surface_temperature_K = eustace.surface_temperature.get_surface_temperature(algorithm,
                                                                              coeff,
                                                                              tb_11_K,
-                                                                             values["tb_12_K"][i],  # tb_12_K,
+                                                                             tb_12_K,
                                                                              tb_37_K,
                                                                              t_clim_K,
                                                                              sun_zenith_angle,
                                                                              sat_zenith_angle)
 
-            yield algorithm, st_truth_K
+            yield algorithm, surface_temperature_K
 
 
-if __name__ == "__main__":
-    import docopt
-    __doc__ = """
-File: {filename}
-
-Usage:
-  {filename} <satellite_id> <sun_zenith_angle> <emissivity_sat_zen_00_filename> <emissivity_sat_zen_15_filename> <emissivity_sat_zen_30_filename> <emissivity_sat_zen_45_filename> <emissivity_sat_zen_60_filename> [-d|-v] [options]
-  {filename} (-h | --help)
-  {filename} --version
-
-Options:
-  -h --help                                Show this screen.
-  --version                                Show version.
-  -v --verbose                             Show some diagostics.
-  -d --debug                               Show some more diagostics.
-  --dpi=dp                                 The dpi of the output image, [default: 300].
-  --output-dir=<dir>                       Output directory.
-""".format(filename=__file__)
-    args = docopt.docopt(__doc__, version='0.1')
-    if args["--debug"]:
-        logging.basicConfig(level=logging.DEBUG)
-    elif args["--verbose"]:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig(level=logging.WARNING)
-    LOG.info(args)
-
-    values_from_file = {}
-    sat_zenith_angles = [0, 15, 30, 45, 60]
-    colors = {0: "r", 15: "g", 30: "b", 45: "m", 60: "c"}
-    for sat_zenith_angle in sat_zenith_angles:
-        values_from_file["sat_zen_%02i" % (sat_zenith_angle)] = load_values_from_file(args["<emissivity_sat_zen_%02i_filename>" % (sat_zenith_angle)])
-    
-    stats = calc_stats(values_from_file)
-
-    for angle_key in stats.keys():
-        for temp_key in stats[angle_key].keys():
-            for stat_type in stats[angle_key][temp_key].keys():
-                print angle_key, temp_key, stat_type, stats[angle_key][temp_key][stat_type]
-
-    sat_zenith_angle_temps = {}
-    # Calculate the temperatures.
-    for sat_zenith_angle in sat_zenith_angles:
-        surface_temperatures=[]
-        i = 0
-        for algorithm, st_truth in get_temperatures(args["<satellite_id>"],
-                                                    int(args["<sun_zenith_angle>"]),  # sun_zenith_angle,
-                                                    sat_zenith_angle,
-                                                    values_from_file["sat_zen_%02i" % (sat_zenith_angle)],):
-            if np.isnan(st_truth):
-                LOG.debug("st_truth was NaN.")
-                continue
-
-            surface_temperatures.append(st_truth)
-        sat_zenith_angle_temps[sat_zenith_angle] = np.array(surface_temperatures)
-    st_stds = []
-    st_avgs = []
-    tb_stds = []
-    tb_avgs = []
-    for sat_zenith_angle in sat_zenith_angles:
-        st_stds.append(np.std(sat_zenith_angle_temps[sat_zenith_angle]))
-        st_avgs.append(np.average(sat_zenith_angle_temps[sat_zenith_angle]))
-        tb_stds.append(np.std(values_from_file["sat_zen_%02i" % (sat_zenith_angle)]["tb_11_K"]))
-        tb_avgs.append(np.average(values_from_file["sat_zen_%02i" % (sat_zenith_angle)]["tb_11_K"]))
-
-
-
-    LOG.debug("Clearing plt")
-    """
-    plt.title("Std")
-    plt.plot(sat_zenith_angles, st_stds, "r-", label="std(st)")
-    plt.plot(sat_zenith_angles, tb_stds, "g-", label="std(tb_11_K)")
-
-    plt.ylabel(r"$\mathtt{std}$")
-    plt.xlabel(r"$\mathtt{sat\_zenit\_angle}$")
-    plt.legend(loc="upper left")
-    # plt.show()
-
+def create_histogram(sun_zenith_angle, sat_zenith_angles, sat_zenith_angle_temps, dpi):
     plt.clf()
     max_temp = -1e20
     min_temp = 1e20
+
     for sat_zenith_angle in sat_zenith_angles:
         max_temp = max(np.max(sat_zenith_angle_temps[sat_zenith_angle]), max_temp)
         min_temp = min(np.min(sat_zenith_angle_temps[sat_zenith_angle]), max_temp)
 
-    _bins = np.linspace(min_temp, max_temp, 50)
-    for sat_zenith_angle in sat_zenith_angles:
-        plt.clf()
-        for tb in ["tb_11_K", "tb_12_K", "tb_37_K"]:
-            n, bins, patches = plt.hist(values_from_file["sat_zen_%02i" % (sat_zenith_angle)][tb],
-                                        _bins,
-                                        alpha=0.5,
-                                        label=tb)
-        plt.legend(loc="upper left")
-        plt.show()
-    """
-
-    plt.clf()
-    max_temp = -1e20
-    min_temp = 1e20
-    for sat_zenith_angle in sat_zenith_angles:
-        max_temp = max(np.max(sat_zenith_angle_temps[sat_zenith_angle]), max_temp)
-        min_temp = min(np.min(sat_zenith_angle_temps[sat_zenith_angle]), max_temp)
-
-    #_bins = np.linspace(min_temp, max_temp, 100)
     offset = 0.3
     t = 260
     number_of_bins = 30
     _bins = np.linspace(t-offset, t+offset, number_of_bins)
+
     for sat_zenith_angle in sat_zenith_angles:
         LOG.debug("Clear the plot...")
         plt.clf()
@@ -223,7 +131,7 @@ Options:
         plt.gca().get_xaxis().get_major_formatter().set_useOffset(False)
 
         # Create a filename.
-        filename = "emissivity_histogram_sat_zenit_angle_%02i" % sat_zenith_angle
+        filename = "emissivity_histogram_sun_zenith_angle_%i_sat_zenith_angle_%02i" % (sun_zenith_angle, sat_zenith_angle)
         filename += ".png"
         # Replacing all spaces with underscores.
         filename = filename.replace(" ", "_")
@@ -239,13 +147,132 @@ Options:
             # Put the files in the output directory.
             filename = os.path.join(args["--output-dir"], filename)
 
-        plt.title(r"$\mathtt{sat\_zenith\_angle:\ %02i}$" %(sat_zenith_angle))
+        plt.title(r"$\mathtt{sun\_zenith\_angle: %i, sat\_zenith\_angle:\ %02i}$" %(sun_zenith_angle, sat_zenith_angle))
         plt.ylabel(r"$\mathtt{N_{perturbations}}$")
         plt.xlabel(r"$\mathtt{sat\_zenith\_angle}$")
         x1,x2,y1,y2 = plt.axis()
         plt.axis((x1, x2, 0, 450))
 
         LOG.debug("Saving plot to %s" %(filename))
-        plt.savefig(filename, dpi=int(args['--dpi']))
+        plt.savefig(filename, dpi=dpi)
         LOG.info("Plot saved to %s" %(filename))
+
+def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_stds, dpi):
+    LOG.debug("Clearing plt")
+    plt.title(r"$\mathtt{Sandard\ deviation,\ sun\_zenith\_angle:\ %i}$" %(sun_zenith_angle))
+    plt.plot(sat_zenith_angles, surface_temperature_stds, "r-", label="std(st)")
+
+    plt.ylabel(r"$\mathtt{Standard deviation}$")
+    plt.xlabel(r"$\mathtt{sat\_zenith\_angle}$")
+
+    # Create a filename.
+    filename = "emissivity_standard_deviations_sun_zenith_angle_%i" % (sun_zenith_angle)
+    filename += ".png"
+    # Replacing all spaces with underscores.
+    filename = filename.replace(" ", "_")
+    
+    # Append to output directory, if set.
+    if args["--output-dir"] is not None:
+        # Make sure that the output directory exits.
+        if not os.path.isdir(args["--output-dir"]):
+            # Create the output directory.
+            LOG.warning("Output directory, '%s', did not exist. Creating it." % args["--output-dir"])
+            os.makedirs(args["--output-dir"])
+
+        # Put the files in the output directory.
+        filename = os.path.join(args["--output-dir"], filename)
+
+    LOG.debug("Saving plot to %s" %(filename))
+    plt.savefig(filename, dpi=dpi)
+    LOG.info("Plot saved to %s" %(filename))
+
+
+def calculate_surface_temperatures_by_sat_zenith_angle(satellite_id, sun_zenith_angle, sat_zenith_angles, values_from_files):
+    surface_temperatures_by_sat_zenith_angle = {}
+    for sat_zenith_angle in sat_zenith_angles:
+        # For every sat zenith angle.
+        surface_temperatures=[]
+        i = 0
+        for algorithm, surface_temperature_K in get_temperatures(satellite_id,
+                                                                 sun_zenith_angle,
+                                                                 sat_zenith_angle,
+                                                                 values_from_files["sat_zen_%02i" % (sat_zenith_angle)],):
+            if np.isnan(surface_temperature_K):
+                LOG.debug("surface_temperature_K was NaN.")
+                continue
+
+            surface_temperatures.append(surface_temperature_K)
+        # Put the collection of temperatures into the dict.
+        # Converts to np.array first.
+        surface_temperatures_by_sat_zenith_angle[sat_zenith_angle] = np.array(surface_temperatures)
+    # Return all the calculted temperatures.
+    return surface_temperatures_by_sat_zenith_angle
+
+def get_surface_temperature_stds(surface_temperatures_by_sat_zenith_angle, sat_zenith_angles):
+    surface_temperature_stds = []
+    for sat_zenith_angle in sat_zenith_angles:
+        surface_temperature_stds.append(np.std(surface_temperatures_by_sat_zenith_angle[sat_zenith_angle]))
+    return surface_temperature_stds
+
         
+
+if __name__ == "__main__":
+    import docopt
+    sat_zenith_angles = [0, 15, 30, 45, 60]
+
+    __doc__ = """
+File: {filename}
+
+Usage:
+  {filename} <satellite_id> <sun_zenith_angle> {emissivity_sat_zen_filenames} [-d|-v] [options]
+  {filename} (-h | --help)
+  {filename} --version
+
+Options:
+  -h --help                                Show this screen.
+  --version                                Show version.
+  -v --verbose                             Show some diagostics.
+  -d --debug                               Show some more diagostics.
+  --dpi=dp                                 The dpi of the output image, [default: 300].
+  --output-dir=<dir>                       Output directory.
+""".format(filename=__file__,
+           emissivity_sat_zen_filenames="<emissivity_sat_zen_" + "_filename> <emissivity_sat_zen_".join(["%02i" % i for i in sat_zenith_angles]) + "_filename>")
+    args = docopt.docopt(__doc__, version='0.1')
+    if args["--debug"]:
+        logging.basicConfig(level=logging.DEBUG)
+    elif args["--verbose"]:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+    LOG.info(args)
+
+    # Init values.
+    values_from_files = {}
+    colors = {0: "r", 15: "g", 30: "b", 45: "m", 60: "c"}
+
+    # Organize the values. That is, loading them in from the files in a specific way.
+    for sat_zenith_angle in sat_zenith_angles:
+        values_from_files["sat_zen_%02i" % (sat_zenith_angle)] = \
+            load_values_from_file(args["<emissivity_sat_zen_%02i_filename>" % 
+                                       (sat_zenith_angle)])
+
+    # The following uncommented lines were used for validation.
+    # Calculating the stats for each sat zenith angle.
+    # stats_by_sat_zenith_angle = calc_stats(values_from_files)
+
+    # Now...
+    # Calculate the temperatures from the emissivity brightness temperatures.
+    surface_temperatures_by_sat_zenith_angle = calculate_surface_temperatures_by_sat_zenith_angle(args["<satellite_id>"],
+                                                                                                  int(args["<sun_zenith_angle>"]),
+                                                                                                  sat_zenith_angles,
+                                                                                                  values_from_files)
+
+    # Create the histogram
+    create_histogram(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperatures_by_sat_zenith_angle, int(args["--dpi"]))
+
+
+    # Get the standard deviations.
+    surface_temperature_stds = get_surface_temperature_stds(surface_temperatures_by_sat_zenith_angle, sat_zenith_angles)
+
+    # Create the plot.
+    create_line_plot(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperature_stds, int(args["--dpi"]))
