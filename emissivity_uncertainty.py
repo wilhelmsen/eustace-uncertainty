@@ -101,7 +101,10 @@ def get_temperatures(satellite_id, sun_zenith_angle, sat_zenith_angle, values):
             yield algorithm, surface_temperature_K
 
 
-def create_histogram(sun_zenith_angle, sat_zenith_angles, sat_zenith_angle_temps, dpi):
+def create_histogram(sun_zenith_angle, sat_zenith_angles, sat_zenith_angle_temps, dpi, output_directory=None):
+    """
+    Create a histogram of how the perturbed values are distributed.
+    """
     plt.clf()
     max_temp = -1e20
     min_temp = 1e20
@@ -126,8 +129,10 @@ def create_histogram(sun_zenith_angle, sat_zenith_angles, sat_zenith_angle_temps
                                     color="#FF1493",
                                     label="%i" % sat_zenith_angle)
         #plt.legend(loc="upper left")
-        
-        # Avoid "offset xaxis".
+
+        # Avoid "offset xaxis". That is, when e.g. 10393200 becomes 
+        # 1.0393200 + 1e-7 where 1e-7 is the offset, or something more
+        # obscure.
         plt.gca().get_xaxis().get_major_formatter().set_useOffset(False)
 
         # Create a filename.
@@ -136,31 +141,35 @@ def create_histogram(sun_zenith_angle, sat_zenith_angles, sat_zenith_angle_temps
         # Replacing all spaces with underscores.
         filename = filename.replace(" ", "_")
 
-        # Append to output directory, if set.
-        if args["--output-dir"] is not None:
-            # Make sure that the output directory exits.
-            if not os.path.isdir(args["--output-dir"]):
-                # Create the output directory.
-                LOG.warning("Output directory, '%s', did not exist. Creating it." % args["--output-dir"])
-                os.makedirs(args["--output-dir"])
-
+        if output_directory is not None:
             # Put the files in the output directory.
-            filename = os.path.join(args["--output-dir"], filename)
+            filename = os.path.join(output_directory, filename)
 
+        # Making the filename absolute.
+        filename = os.path.abspath(filename)
+
+        # Create the plot.
         plt.title(r"$\mathtt{sun\_zenith\_angle: %i, sat\_zenith\_angle:\ %02i}$" %(sun_zenith_angle, sat_zenith_angle))
         plt.ylabel(r"$\mathtt{N_{perturbations}}$")
         plt.xlabel(r"$\mathtt{sat\_zenith\_angle}$")
         x1,x2,y1,y2 = plt.axis()
         plt.axis((x1, x2, 0, 450))
 
+        # Saving the figure.
         LOG.debug("Saving plot to %s" %(filename))
         plt.savefig(filename, dpi=dpi)
         LOG.info("Plot saved to %s" %(filename))
 
-def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_stds, dpi):
+
+def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_stds, dpi, output_dir=None):
+    """
+    Creates the line plot of the standard deviations.
+    """
     LOG.debug("Clearing plt")
+    plt.clf()
+
     plt.title(r"$\mathtt{Sandard\ deviation,\ sun\_zenith\_angle:\ %i}$" %(sun_zenith_angle))
-    plt.plot(sat_zenith_angles, surface_temperature_stds, "r-", label="std(st)")
+    plt.plot(sat_zenith_angles, surface_temperature_stds, "r-", label="std(st)", color="#FF1493")
 
     plt.ylabel(r"$\mathtt{Standard deviation}$")
     plt.xlabel(r"$\mathtt{sat\_zenith\_angle}$")
@@ -172,15 +181,15 @@ def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_st
     filename = filename.replace(" ", "_")
     
     # Append to output directory, if set.
-    if args["--output-dir"] is not None:
+    if output_dir is not None:
         # Make sure that the output directory exits.
-        if not os.path.isdir(args["--output-dir"]):
+        if not os.path.isdir(output_dir):
             # Create the output directory.
-            LOG.warning("Output directory, '%s', did not exist. Creating it." % args["--output-dir"])
-            os.makedirs(args["--output-dir"])
+            LOG.warning("Output directory, '%s', did not exist. Creating it." % output_dir)
+            os.makedirs(output_dir)
 
         # Put the files in the output directory.
-        filename = os.path.join(args["--output-dir"], filename)
+        filename = os.path.join(output_dir, filename)
 
     LOG.debug("Saving plot to %s" %(filename))
     plt.savefig(filename, dpi=dpi)
@@ -188,6 +197,10 @@ def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_st
 
 
 def calculate_surface_temperatures_by_sat_zenith_angle(satellite_id, sun_zenith_angle, sat_zenith_angles, values_from_files):
+    """
+    Calculate the surface temperatures based on the simulated input
+    brightness temperatures.
+    """
     surface_temperatures_by_sat_zenith_angle = {}
     for sat_zenith_angle in sat_zenith_angles:
         # For every sat zenith angle.
@@ -246,6 +259,14 @@ Options:
         logging.basicConfig(level=logging.WARNING)
     LOG.info(args)
 
+    # Append to output directory, if set.
+    if args["--output-dir"] is not None:
+        # Make sure that the output directory exits.
+        if not os.path.isdir(args["--output-dir"]):
+            # Create the output directory.
+            LOG.error("Output directory, '%s', did not exist. Creating it." % args["--output-dir"])
+            raise RuntimeException("Directory '%s' does not exist." % args["--output-dir"])
+
     # Init values.
     values_from_files = {}
     colors = {0: "r", 15: "g", 30: "b", 45: "m", 60: "c"}
@@ -256,11 +277,11 @@ Options:
             load_values_from_file(args["<emissivity_sat_zen_%02i_filename>" % 
                                        (sat_zenith_angle)])
 
-    # The following uncommented lines were used for validation.
+    # The following two uncommented lines were used for validation.
     # Calculating the stats for each sat zenith angle.
     # stats_by_sat_zenith_angle = calc_stats(values_from_files)
 
-    # Now...
+
     # Calculate the temperatures from the emissivity brightness temperatures.
     surface_temperatures_by_sat_zenith_angle = calculate_surface_temperatures_by_sat_zenith_angle(args["<satellite_id>"],
                                                                                                   int(args["<sun_zenith_angle>"]),
@@ -268,11 +289,11 @@ Options:
                                                                                                   values_from_files)
 
     # Create the histogram
-    create_histogram(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperatures_by_sat_zenith_angle, int(args["--dpi"]))
+    create_histogram(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperatures_by_sat_zenith_angle, int(args["--dpi"]), args["--output-dir"])
 
 
     # Get the standard deviations.
     surface_temperature_stds = get_surface_temperature_stds(surface_temperatures_by_sat_zenith_angle, sat_zenith_angles)
 
     # Create the plot.
-    create_line_plot(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperature_stds, int(args["--dpi"]))
+    create_line_plot(float(args["<sun_zenith_angle>"]), sat_zenith_angles, surface_temperature_stds, int(args["--dpi"]), args["--output-dir"])
