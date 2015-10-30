@@ -196,7 +196,7 @@ Options:
   --algorithm=<algo>         Only include values calculated with the given algorithm.
 
 Example:
-  python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenit_angle s.sat_zenit_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
+  python {filename} /data/hw/eustace_uncertainty_10_perturbations.sqlite3 s.sun_zenith_angle s.sat_zenith_angle s.surface_temp "s.cloudmask" "s.t_11 - s.t_12"
 
 """.format(filename=__file__)
     args = docopt.docopt(__doc__, version='0.1')

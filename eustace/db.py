@@ -9,7 +9,7 @@ LOG = logging.getLogger(__name__)
 # Temp structure that should be removed.
 # Valid values to insert into the different tables. There are more values in the tables, and this functionality
 # should be removed when the structure is more decided.
-_SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenit_angle", "sun_zenit_angle", "sea_ice_fraction", "cloudmask", "swath_datetime", "lat", "lon"]
+_SWATH_KEYS = ["satellite_name", "surface_temp", "t_11", "t_12", "t_37", "sat_zenith_angle", "sun_zenith_angle", "sea_ice_fraction", "cloudmask", "swath_datetime", "lat", "lon"]
 _PERTURBATION_KEYS = ["epsilon_11", "epsilon_12", "epsilon_37", "surface_temp"]
 
 
@@ -23,8 +23,8 @@ class Db:
            t_11 REAL NOT NULL,
            t_12 REAL NOT NULL,
            t_37 REAL,
-           sat_zenit_angle REAL NOT NULL,
-           sun_zenit_angle REAL NOT NULL,
+           sat_zenith_angle REAL NOT NULL,
+           sun_zenith_angle REAL NOT NULL,
            sea_ice_fraction REAL,
            cloudmask INT NOT NULL,
            swath_datetime DATETIME NOT NULL,
@@ -35,8 +35,8 @@ class Db:
         """CREATE INDEX IF NOT EXISTS swath_datetime_index ON swath_inputs(swath_datetime)""",
         """CREATE INDEX IF NOT EXISTS swath_lat_index ON swath_inputs(lat)""",
         """CREATE INDEX IF NOT EXISTS swath_lon_index ON swath_inputs(lon)""",
-        """CREATE INDEX IF NOT EXISTS swath_sun_zenit_index ON swath_inputs(sun_zenit_angle)""",
-        """CREATE INDEX IF NOT EXISTS swath_sat_zenit_index ON swath_inputs(sat_zenit_angle)""",
+        """CREATE INDEX IF NOT EXISTS swath_sun_zenith_index ON swath_inputs(sun_zenith_angle)""",
+        """CREATE INDEX IF NOT EXISTS swath_sat_zenith_index ON swath_inputs(sat_zenith_angle)""",
 
         """CREATE TABLE IF NOT EXISTS perturbations (
            id INT PRIMARY KEY,

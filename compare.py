@@ -122,8 +122,8 @@ Options:
                                 raise RuntimeException("Missing T11 or T12")
 
                             # Angles.
-                            sun_zenit_angle = float(avhrr_model.sun_zenit_angle[row_index, col_index])
-                            sat_zenit_angle = float(avhrr_model.sat_zenit_angle[row_index, col_index])
+                            sun_zenith_angle = float(avhrr_model.sun_zenith_angle[row_index, col_index])
+                            sat_zenith_angle = float(avhrr_model.sat_zenith_angle[row_index, col_index])
 
                             # Missing climatology
                             t_clim_K = t11_K
@@ -135,7 +135,7 @@ Options:
 
                             # Pick algorithm.
                             algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
-                                sun_zenit_angle,
+                                sun_zenith_angle,
                                 t11_K,
                                 t37_K)
 
@@ -146,8 +146,8 @@ Options:
                                                                                      t12_K,
                                                                                      t37_K,
                                                                                      t_clim_K,
-                                                                                     sun_zenit_angle,
-                                                                                     sat_zenit_angle)
+                                                                                     sun_zenith_angle,
+                                                                                     sat_zenith_angle)
 
                             if np.isnan(st_truth_K):
                                 # No need to do more for this pixel, if the output is not a number.
@@ -158,8 +158,8 @@ Options:
                                 surface_temp=st_truth_K, # float(true_st_K),
                                 t_11=float(t11_K),
                                 t_12=float(t12_K),
-                                sat_zenit_angle=sat_zenit_angle,
-                                sun_zenit_angle=sun_zenit_angle,
+                                sat_zenith_angle=sat_zenith_angle,
+                                sun_zenith_angle=sun_zenith_angle,
                                 cloudmask=int(avhrr_model.cloudmask[row_index, col_index]),
                                 swath_datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 lat=float(lat),
@@ -179,7 +179,7 @@ Options:
 
                                 # Pick algorithm.
                                 algorithm = eustace.surface_temperature.select_surface_temperature_algorithm(
-                                    sun_zenit_angle,
+                                    sun_zenith_angle,
                                     perturbed_t11_K,
                                     perturbed_t37_K)
 
@@ -190,8 +190,8 @@ Options:
                                                                                    perturbed_t12_K,
                                                                                    perturbed_t37_K,
                                                                                    t_clim_K,
-                                                                                   sun_zenit_angle,
-                                                                                   sat_zenit_angle)
+                                                                                   sun_zenith_angle,
+                                                                                   sat_zenith_angle)
 
 
                                 if np.isnan(st_K):

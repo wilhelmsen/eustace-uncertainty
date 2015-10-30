@@ -8,6 +8,7 @@ import random
 import multiprocessing as mp
 import glob
 import os
+import contextlib
 
 # Third party
 import numpy as np
