@@ -1,21 +1,31 @@
-#
-#
-# The following commands has been used to create plots:
-for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do for ALGORITHM in SST_DAY SST_NIGHT SST_TWILIGHT IST MIZT_SST_IST_DAY MIZT_SST_IST_NIGHT MIZT_SST_IST_TWILIGHT; do SOURCE_DBFILE=/data/hw/eustace_databases/$SAT_ID.sqlite3; DB_FILE=/tmp/ramdisks/ramdisk/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && rsync -av $SOURCE_DBFILE $DB_FILE && python scatter_plot.py $DB_FILE s.surface_temp p.surface_temp "s.t_11 - s.t_12" p.epsilon_11 p.epsilon_12 p.epsilon_37 -d --y-min -0.6 --y-max 0.6 --lat-gt 50 --lat-lt -50 --output-dir /data/hw/eustace_plots --algorithm $ALGORITHM; done; rm $DB_FILE; done
-python create_std_table.py /tmp/ramdisks/ramdisk/metop02.sqlite3
+# Creating a ram disk...
+RAMDISK=/tmp/ramdisk
+mkdir $RAMDISK
+mount -t tmpfs -o size=$((12 * 1024))m tmpfs $RAMDISK
 
 
-#
-#
+
+# Populate the database.
+for SAT_ID in metop02 noaa12 noaa14 noaa15 noaa16 noaa17 noaa18; do DB_FILE=$RAMDISK/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && python populate_database.py $DB_FILE $SAT_ID data/fra_met_no/ --sea-ice-fraction-data-directory data/ice_conc/ -v && mv $DB_FILE /data/hw/eustace_databases/. ; done
+
+
+
+
+# Create plots.
+for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do for ALGORITHM in SST_DAY SST_NIGHT SST_TWILIGHT IST MIZT_SST_IST_DAY MIZT_SST_IST_NIGHT MIZT_SST_IST_TWILIGHT; do SOURCE_DBFILE=/data/hw/eustace_databases/$SAT_ID.sqlite3; DB_FILE=$RAMDISK/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && rsync -av $SOURCE_DBFILE $DB_FILE && python scatter_plot.py $DB_FILE s.surface_temp p.surface_temp "s.t_11 - s.t_12" p.epsilon_11 p.epsilon_12 p.epsilon_37 -d --y-min -0.6 --y-max 0.6 --lat-gt 50 --lat-lt -50 --output-dir /data/hw/eustace_plots --algorithm $ALGORITHM; done; rm $DB_FILE; done
+python create_std_table.py $RAMDISK/metop02.sqlite3f
+
+
+
 # To create statistics table.
 # Two steps.
 # 1.
-for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do SOURCE_DBFILE=/data/hw/eustace_databases/$SAT_ID.sqlite3; DB_FILE=/tmp/ramdisks/ramdisk/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && rsync -av $SOURCE_DBFILE $DB_FILE && python create_std_table.py $DB_FILE --lat-gt 50 --lat-lt -50 -d --output-dir /data/hw/eustace_stats/; rm $DB_FILE; done
+for SAT_ID in metop02 noaa15 noaa16 noaa17 noaa18 noaa12 noaa14; do SOURCE_DBFILE=/data/hw/eustace_databases/$SAT_ID.sqlite3; DB_FILE=$RAMDISK/$SAT_ID.sqlite3; touch $DB_FILE && rm $DB_FILE && rsync -av $SOURCE_DBFILE $DB_FILE && python create_std_table.py $DB_FILE --lat-gt 50 --lat-lt -50 -d --output-dir /data/hw/eustace_stats/; rm $DB_FILE; done
 
 # 2.
 python merge_std_table.py /data/hw/eustace_stats algorithm_sat_std.stat -f -v
 
-#
-#
+
+
 # Create statistics for emissivity.
 python emissivity_uncertainty.py metop02 50 data/emissivity/gs_dens_e345_Tb345_ia00.txt data/emissivity/gs_dens_e345_Tb345_ia15.txt data/emissivity/gs_dens_e345_Tb345_ia30.txt data/emissivity/gs_dens_e345_Tb345_ia45.txt data/emissivity/gs_dens_e345_Tb345_ia60.txt -v

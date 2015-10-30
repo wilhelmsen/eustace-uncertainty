@@ -169,6 +169,8 @@ def create_line_plot(sun_zenith_angle, sat_zenith_angles, surface_temperature_st
     plt.clf()
 
     plt.title(r"$\mathtt{Sandard\ deviation,\ sun\_zenith\_angle:\ %i}$" %(sun_zenith_angle))
+    for sat_zenith_angle, surface_temp in zip(sat_zenith_angles, surface_temperature_stds):
+        LOG.info("%s %s" %(sat_zenith_angle, surface_temp))
     plt.plot(sat_zenith_angles, surface_temperature_stds, "r-", label="std(st)", color="#FF1493")
 
     plt.ylabel(r"$\mathtt{Standard deviation}$")

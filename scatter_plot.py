@@ -45,25 +45,25 @@ def increment_bins(bins, x_idx, y_idx):
 
 def get_color_array(x_array_pruned, y_array_pruned, x_interval_centers, y_interval_centers):
         LOG.debug("Getting color array.")
-        LOG.debug("Counting...")
+        LOG.info("Counting...")
         t = datetime.datetime.now()
         bins_count = {}
         x_len = len(x_array_pruned)
         for i, x_ in enumerate(x_array_pruned):
             if i % 100000 == 0:
-                print i, "/", x_len
+                LOG.info("%i/%i" % ( i, x_len ))
             x_i = get_bin_index(x_interval_centers, x_array_pruned[i])
             y_i = get_bin_index(y_interval_centers, y_array_pruned[i])
             increment_bins(bins_count, x_i, y_i)
         LOG.debug("Took: %s" % (str(datetime.datetime.now() - t)))
 
 
-        LOG.debug("Creating colors...")
+        LOG.info("Creating colors...")
         t = datetime.datetime.now()
         colors = np.empty_like(x_array_pruned)
         for i, c in enumerate(colors):
             if i % 100000 == 0:
-                print i, "/", x_len
+                LOG.info("%i/%i" % ( i, x_len ))
             x_i = get_bin_index(x_interval_centers, x_array_pruned[i])
             y_i = get_bin_index(y_interval_centers, y_array_pruned[i])
             colors[i] = bins_count[x_i][y_i]
@@ -225,7 +225,7 @@ Example:
     t = datetime.datetime.now()
     with eustace.db.Db(args["<database-filename>"]) as db:
         # Where sql used for the title in the plots.
-        where_sql = db.build_where_sql(lat_less_than=args["--lat-lt"]
+        where_sql = db.build_where_sql(lat_less_than=args["--lat-lt"],
                                        lat_greater_than=args["--lat-gt"],
                                        tb_11_minus_tb_12_limit=args["--t11-t12-limit"],
                                        algorithm=args["--algorithm"])
@@ -329,10 +329,11 @@ Example:
         ax.grid(args["--grid"])  # Grid in the plot or not.
 
         # Set the title.
-        title = os.path.basename(args["<database-filename>"]).replace(".sqlite3", "").replace("db", "").replace("_", "\_")
+        title = os.path.basename(args["<database-filename>"]).replace(".sqlite3", "").replace("db", "")
         title += " (%s)" % args["--algorithm"] if args["--algorithm"] is not None else ""
         title += ": %s" % variable_name
-        title = r"$\mathtt{%s}$" % title
+        title = r"$ \mathtt{ %s} $" % title
+       
         if where_sql is not None and where_sql.strip() != "":
             title += "\n"
             title += r"$ \mathtt{ %s} $" % (where_sql)
@@ -492,6 +493,7 @@ Example:
         # Save to file.
         LOG.debug("Save the figure to '%s'." % filename)
         plt.savefig(filename, dpi=int(args['--dpi']))
+        print("'%s' saved." % filename)
         LOG.info("'%s' saved." % filename)
         # plt.show()
     
